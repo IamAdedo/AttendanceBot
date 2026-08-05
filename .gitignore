@@ -1,0 +1,13 @@
+# Configuration & Secrets
+config.json
+.env
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+npm-debug.log*
+
+# PM2
+.pm2/
