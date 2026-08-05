@@ -56,17 +56,24 @@ Once set up, it runs invisibly in the background on your computer. You can add m
 
 Open your **Terminal** (Mac/Linux) or **PowerShell** (Windows) and run these commands one by one:
 
-```bash
 # Navigate to where you want to save the bot (e.g., Desktop)
+
+```bash
 cd Desktop
+```
 
 # Download the project (or download and extract the ZIP from GitHub)
+```bash
 git clone https://github.com/IamAdedo/attendanceBot.git
+```
 
 # Enter the project folder
+```bash
 cd attendanceBot
+```
 
 # Install required packages (this may take 1-2 minutes)
+```bash
 npm install
 ```
 
