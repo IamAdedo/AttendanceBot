@@ -190,13 +190,13 @@ npm run service:status
 
 You'll see:
 
-
+```
 ┌─────┬──────────────────────┬─────────┬─────────┬──────────┐
 │ id  │ name                 │ status  │ uptime  │ memory   │
 ├─────┼──────────────────────┼─────────┼─────────┼──────────┤
 │ 0   │ attendanceBot-daemon │ online  │ 2h 15m  │ 45.2 MB  │
 └─────┴──────────────────────┴─────────┴─────────┴──────────┘
-
+```
 
 ### View Live Logs (What's Happening Right Now)
 
