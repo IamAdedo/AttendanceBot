@@ -440,4 +440,3 @@ Enjoy your automated attendance! 🚀
 
 
 ...with love by The !Lazy Hunter <||>
-
