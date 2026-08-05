@@ -1,0 +1,24 @@
+{
+  "globalToken": "YOUR_DISCORD_USER_TOKEN_HERE",
+  "globalWebhookUrl": "https://discord.com/api/webhooks/YOUR_WEBHOOK_URL_HERE",
+  "servers": [
+    {
+      "id": "1234567890",
+      "name": "Work Server",
+      "channelId": "1234567890123456789",
+      "webhookUrl": "",
+      "active": true,
+      "schedules": [
+        {
+          "id": "1234567891",
+          "label": "09:00 AM (Weekdays)",
+          "cron": "0 9 * * 1-5",
+          "message": "Present",
+          "attendanceType": "MESSAGE",
+          "maxJitterMinutes": 10,
+          "active": true
+        }
+      ]
+    }
+  ]
+}
