@@ -1,0 +1,25 @@
+{
+    "name": "attendanceBot",
+    "version": "2.0.0",
+    "description": "Multi-server Discord daily attendance background daemon",
+    "main": "src/bot.js",
+    "bin": {
+        "attendanceBot": "bin/cli.js"
+    },
+    "scripts": {
+        "start": "node bin/cli.js",
+        "bot:daemon": "node src/bot.js",
+        "service:install": "node bin/install-service.js",
+        "service:uninstall": "node bin/uninstall-service.js",
+        "service:status": "npx pm2 status attendanceBot-daemon",
+        "service:logs": "npx pm2 logs attendanceBot-daemon"
+    },
+    "dependencies": {
+        "discord.js-selfbot-v13": "^3.7.0",
+        "node-cron": "^3.0.3",
+        "pm2": "^5.3.1"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
