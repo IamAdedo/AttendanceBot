@@ -1,5 +1,6 @@
 input: .
 output: output
+url: https://github.io
 branding:
   name: AttendanceBot
   logo: https://github.com/IamAdedo/IamAdedo/raw/main/files/passport.png
@@ -12,10 +13,10 @@ links:
     url: https://twitter.com/IamAdedo
   - name: LinkedIn
     url: https://www.linkedin.com/in/iamadedo
-edit:
-  repo: iamadedo/AttendanceBot
-  branch: main
-  label: Edit this page
+# edit:
+  # repo: iamadedo/AttendanceBot
+  # branch: main
+  # label: Edit this page
 
 footer:
 copyright: "&copy {{year}} IamAdedo. All rights reserved. Built for TalentNation Daily Attendance."
