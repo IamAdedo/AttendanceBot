@@ -22,16 +22,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: build site with Retype
-        uses: retypeapp/action@v3
+        uses: retypeapp/action-build@latest
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'output/'
+          path: 'retype-output/'
 
       - name: Deploy to GitHub Pages
         id: deployment
