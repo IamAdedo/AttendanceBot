@@ -159,20 +159,7 @@ You'll see:
 3. Click the **Console** tab at the top
 4. Copy and paste this code, then press **Enter**:
 
-![let m;
-webpackChunkdiscord_app.push([
-    [Math.random()],
-    {},
-    runtime => {
-        for (const id in runtime.c) {
-            const module = runtime.c[id];
-            if (module?.exports?.getToken) {
-                m = module;
-                break;
-            }
-        }
-    }
-]);](img)
+![script image](img)
 
 <!--
 ```javascript
@@ -189,7 +176,7 @@ webpackChunkdiscord_app.push([
             }
         }
     }
-]); -->
+]);
 
 
 if (m) {
@@ -198,6 +185,8 @@ if (m) {
     console.warn("token not found")
 }
 ```
+-->
+
 
 5. Your token will appear in the console (a long string of letters and numbers)
 6. **Right-click** it and select **Copy**
