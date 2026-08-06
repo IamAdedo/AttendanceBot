@@ -1,5 +1,5 @@
 input: .
-output: output
+# output: output
 url: https://github.io
 branding:
   name: AttendanceBot
