@@ -30,11 +30,13 @@ jobs:
 
       - name: Build site with Retype
         uses: retypeapp/action-build@latest
+        outputs:
+          output-dir: landing
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'retype-output/'
+          path: 'landing/'
 
       - name: Deploy to GitHub Pages
         id: deployment
