@@ -1,9 +1,17 @@
 input: .
 # output: output
 url: https://github.io
+include:
+  - README.md
+exclude:
+  - node_modules/
+  - src/
+  - bin/
+  - "*.js"
+  - "*.json"
 branding:
   name: AttendanceBot
-  logo: https://github.com/IamAdedo/IamAdedo/raw/main/files/passport.png
+  logo: ⚡
   color:
     primary: "#FF5733"
 links:
