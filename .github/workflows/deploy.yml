@@ -28,7 +28,14 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # FIXED: This single step builds your site and pushes it to pages cleanly
+      - name: Build site with Retype
+        uses: retypeapp/action-build@latest
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: 'retype-output/'
+
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: retypeapp/action-github-pages@v3
+        uses: actions/deploy-pages@v4
