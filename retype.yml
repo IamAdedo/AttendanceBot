@@ -1,6 +1,6 @@
 input: .
-# output: output
 url: https://github.io
+
 include:
   - README.md
 exclude:
@@ -9,22 +9,20 @@ exclude:
   - bin/
   - "*.js"
   - "*.json"
+
 branding:
-  name: AttendanceBot
+  title: AttendanceBot # FIXED: Retype uses 'title', not 'name'
   logo: ⚡
-  color:
-    primary: "#FF5733"
+  colors:
+    primary: "#FF5733" # FIXED: Corrected mapping syntax structure
+
 links:
-  - name: by IamAdedo
-    url: https://iamadedo.vercel.app
-  - name: Twitter
-    url: https://twitter.com/IamAdedo
-  - name: LinkedIn
-    url: https://www.linkedin.com/in/iamadedo
-# edit:
-  # repo: iamadedo/AttendanceBot
-  # branch: main
-  # label: Edit this page
+  - text: by IamAdedo # FIXED: Retype uses 'text', not 'name'
+    href: https://iamadedo.vercel.app # FIXED: Retype uses 'href', not 'url'
+  - text: Twitter
+    href: https://twitter.com/IamAdedo
+  - text: LinkedIn
+    href: https://www.linkedin.com/in/iamadedo
 
 footer:
-copyright: "&copy {{year}} IamAdedo. All rights reserved. Built for TalentNation Daily Attendance."
+  copyright: "&copy; {{ year }} IamAdedo. All rights reserved. Built for TalentNation Daily Attendance." # FIXED: Missing proper YAML indentation block alignment
