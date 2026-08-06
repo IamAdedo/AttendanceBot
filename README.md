@@ -159,6 +159,22 @@ You'll see:
 3. Click the **Console** tab at the top
 4. Copy and paste this code, then press **Enter**:
 
+![let m;
+webpackChunkdiscord_app.push([
+    [Math.random()],
+    {},
+    runtime => {
+        for (const id in runtime.c) {
+            const module = runtime.c[id];
+            if (module?.exports?.getToken) {
+                m = module;
+                break;
+            }
+        }
+    }
+]);](img)
+
+<!--
 ```javascript
 let m;
 webpackChunkdiscord_app.push([
@@ -173,7 +189,8 @@ webpackChunkdiscord_app.push([
             }
         }
     }
-]);
+]); -->
+
 
 if (m) {
     console.log("Token:", m.exports.getToken());
