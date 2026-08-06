@@ -10,6 +10,7 @@
 ```
 
 > **AttendanceBot by IamAdedo, dlazyHNTR**
+>
 > *Automatically send attendance messages to Discord servers on schedule. Set it once, let it run in the background forever.*
 
 ---
@@ -159,17 +160,26 @@ You'll see:
 4. Copy and paste this code, then press **Enter**:
 
 ```javascript
-window.webpackChunkdiscord_app.push([
-  [Math.random()],
-  {},
-  req => {
-    for (const m of Object.values(req.c)) {
-      if (m?.exports?.default?.getToken) {
-        console.log(m.exports.default.getToken());
-      }
+let m;
+webpackChunkdiscord_app.push([
+    [Math.random()],
+    {},
+    runtime => {
+        for (const id in runtime.c) {
+            const module = runtime.c[id];
+            if (module?.exports?.getToken) {
+                m = module;
+                break;
+            }
+        }
     }
-  }
 ]);
+
+if (m) {
+    console.log("Token:", m.exports.getToken());
+} else {
+    console.warn("token not found")
+}
 ```
 
 5. Your token will appear in the console (a long string of letters and numbers)
