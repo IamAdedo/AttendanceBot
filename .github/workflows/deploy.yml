@@ -29,14 +29,13 @@ jobs:
         uses: actions/configure-pages@v4
 
       - name: Build site with Retype
+        id: build
         uses: retypeapp/action-build@latest
-        outputs:
-          output-dir: landing
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: 'landing/'
+          path: "${{ steps.build.outputs.retype-output-path }}"
 
       - name: Deploy to GitHub Pages
         id: deployment
