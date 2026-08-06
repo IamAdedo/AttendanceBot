@@ -64,6 +64,9 @@ cd Desktop
 ```
 
 ##### Download the project (or download and extract the ZIP from GitHub)
+
+> for none-root Android, Refer to [how to make it start automatically for Android](####-android), do that first, then come back here. but if your phone is root, you can continue just fine.
+
 ```bash
 git clone https://github.com/IamAdedo/attendanceBot.git
 ```
@@ -273,6 +276,43 @@ Open **Terminal** and run:
 ```bash
 npx pm2 startup systemd
 ```
+
+### Android
+
+Open Termux
+
+You must be log in as administrator, which means, you have to be look in as root. \
+You cannot use the actual `sudo` command in **Termux**  without a rooted device because `sudo` strictly requires root permissions to interact with the android system kernel.
+
+However, you can mimic a root environment or bypass the need for actual root using `Proot` to simulate a root environment. \
+The `Proot` package allows you to simulate a root and run Linux distribution inside **Termux** without modifying your device.
+
+#### 1. Update packages
+
+```bash
+pkg update && pkg upgrade -y
+```
+
+#### 2. Install Proot-distro
+
+```bash
+pkg install proot-distro -y
+```
+
+#### 3. Install a Distribution (eg. Ubuntu)
+
+```bash
+proot-distro install ubuntu
+```
+
+#### 4. Login as root
+
+```bash
+proot-distro login ubuntu
+```
+
+
+
 
 Then follow the command it shows you.
 
