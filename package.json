@@ -1,6 +1,6 @@
 {
     "name": "attendanceBot",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "description": "Multi-server Discord daily attendance background daemon",
     "main": "src/bot.js",
     "bin": {
