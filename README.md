@@ -9,8 +9,7 @@
 ╚══════╝╚══════╝╚══════╝
 ```
 
-> **AttendanceBot by IamAdedo, dlazyHNTR**
->
+> **AttendanceBot by IamAdedo, dlazyHNTR** \
 > *Automatically send attendance messages to Discord servers on schedule. Set it once, let it run in the background forever.*
 
 ---
