@@ -30,10 +30,13 @@ Once set up, it runs invisibly in the background on your computer. You can add m
 
 - ✅ **Multiple Servers** — Manage attendance for unlimited Discord servers
 - ✅ **Multiple Schedules** — Set different times for each server (e.g., 9 AM weekdays, 8 PM weekends)
+- ✅ **Flexible Scheduling** — Everyday, weekdays, weekends, a specific repeating weekday (e.g., every Monday), or a **one-time calendar date** that auto-disables after it fires
+- ✅ **Multi-Time / Multi-Day Builder** — Add several times to one day and several days in a single pass
+- ✅ **Multi-Line Messages** — Attendance messages can span multiple lines
 - ✅ **Anti-Detection** — Adds random delays (1-10 minutes) so messages don't post at the exact same second every day
 - ✅ **Message OR Reaction** — Send text messages OR react with emojis to existing messages
 - ✅ **Webhook Alerts** — Get notifications on your phone when attendance posts successfully (or if something goes wrong)
-- ✅ **Background Service** — Runs 24/7 even when you close the terminal or restart your computer
+- ✅ **Background Service** — Runs 24/7 even when you close the terminal or restart your computer — including **no-root Android (Termux)**
 - ✅ **Easy Setup** — Interactive step-by-step wizard—no coding knowledge needed
 
 ---
@@ -64,7 +67,7 @@ cd Desktop
 
 ##### Download the project (or download and extract the ZIP from GitHub)
 
-> for none-root Android, Refer to [how to make it start automatically for Android](####-android), do that first, then come back here. but if your phone is root, you can continue just fine.
+> 📱 **On Android?** No root required — see [Android (Termux, no root needed)](#android-termux-no-root-needed) for the mobile setup.
 
 ```bash
 git clone https://github.com/IamAdedo/attendanceBot.git
@@ -117,14 +120,20 @@ You'll see a menu like this:
 3. **Profile Name**: Give it a nickname like "Work Server" or "Game Guild"
 4. **Channel ID**: Paste the channel ID where attendance should post
 5. **Schedule**:
-   - Choose **1** for Everyday, **2** for Weekdays only, or **3** for Weekends only
+   - Choose **1** for Everyday, **2** for Weekdays only, **3** for Weekends only, or **4** for **Specific day(s)**
+   - **Option 4** lets you pick either:
+     - **(a) A repeating weekday** — e.g. every Monday, by number (`0`–`6`) or name (`Monday`)
+     - **(b) A one-time date** — e.g. `2026-08-10`; it sends once on that day and then disables itself automatically
+   - For a specific day you can add **multiple times to the same day**, and then **add more days** — all in one go
    - Enter the time (e.g., `09:00 AM` or `21:30`)
-   - Type the message to send (e.g., `Present`)
+   - Type the message to send. Messages can span **multiple lines** — type each line and press **Enter on an empty line** to finish (leave the first line blank to use the default `Present`)
    - Set max random delay in minutes (recommended: `10` minutes)
 
 After adding schedules, you'll be asked if you want to add more. Type `n` when you're done.
 
 ✅ **Your configuration is now saved!** The wizard creates a file called `config.json` that stores all your settings.
+
+> 💡 When you exit the menu (option **5**), AttendanceBot offers to **install and start the background daemon for you automatically** — so you can skip Step 3 below if you accept.
 
 ---
 
@@ -276,44 +285,46 @@ Open **Terminal** and run:
 npx pm2 startup systemd
 ```
 
-### Android
+### Android (Termux, **no root needed**)
 
-Open Termux
+AttendanceBot now runs natively in Termux without root. Install [Termux](https://f-droid.org/en/packages/com.termux/) (F-Droid version is recommended):
 
-You must be log in as administrator, which means, you have to be look in as root. \
-You cannot use the actual `sudo` command in **Termux**  without a rooted device because `sudo` strictly requires root permissions to interact with the android system kernel.
-
-However, you can mimic a root environment or bypass the need for actual root using `Proot` to simulate a root environment. \
-The `Proot` package allows you to simulate a root and run Linux distribution inside **Termux** without modifying your device.
-
-#### 1. Update packages
+#### 1. Update packages & install Node
 
 ```bash
 pkg update && pkg upgrade -y
+pkg install nodejs-lts termux-api -y
 ```
 
-#### 2. Install Proot-distro
+#### 2. Install the project (same as Step 1 above)
 
 ```bash
-pkg install proot-distro -y
+git clone https://github.com/IamAdedo/attendanceBot.git
+cd attendanceBot
+npm install
 ```
 
-#### 3. Install a Distribution (eg. Ubuntu)
+#### 3. Configure and start
 
 ```bash
-proot-distro install ubuntu
+npm start
 ```
 
-#### 4. Login as root
+Set up your server (Step 2 above). When you exit, accept the offer to install the daemon — or run:
 
 ```bash
-proot-distro login ubuntu
+npm run service:install
 ```
 
+The installer detects Termux automatically and:
+- Keeps the daemon alive with a **wake lock** (install the [Termux:API](https://f-droid.org/en/packages/com.termux.api/) app for this) so Android doesn't suspend it
+- Creates a **Termux:Boot** startup script so the daemon resurrects after a reboot
 
+#### 4. (Optional) Auto-start after reboot
 
+Install the [Termux:Boot](https://f-droid.org/en/packages/com.termux.boot/) app from F-Droid, open it once, and the daemon will start automatically on device boot — no root required.
 
-Then follow the command it shows you.
+> ⚠️ **Older alternative (root emulation):** If you previously used the `proot-distro` + Ubuntu approach below, you can keep using it — but the native Termux path above is simpler and needs no root.
 
 ---
 
