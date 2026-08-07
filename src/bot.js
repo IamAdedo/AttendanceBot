@@ -34,6 +34,34 @@ try {
     process.exit(1);
 }
 
+/**
+ * Persists the in-memory config back to disk. Used to disable one-time
+ * schedules after they fire so they don't repeat on the next annual match.
+ */
+function persistConfig() {
+    try {
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf8');
+    } catch (err) {
+        logger.error(`Failed to persist config.json: ${err.message}`);
+    }
+}
+
+/**
+ * Returns true when a one-time schedule's target date matches the current day.
+ * Guards against a cron (min hour DOM month *) re-firing in a later year if the
+ * daemon happened to be offline on the intended date.
+ */
+function isOneTimeDueToday(schedule) {
+    if (!schedule.runDate) return true;
+    const target = new Date(schedule.runDate);
+    const now = new Date();
+    return (
+        target.getFullYear() === now.getFullYear() &&
+        target.getMonth() === now.getMonth() &&
+        target.getDate() === now.getDate()
+    );
+}
+
 if (!config.globalToken) {
     logger.error('Discord User Token missing from config.json. Run "npm start" setup.');
     process.exit(1);
@@ -68,12 +96,41 @@ function initializeSchedules() {
                 return;
             }
 
-            logger.info(`[${server.name}] Loaded Schedule: "${schedule.label}" (${schedule.cron})`);
+            const isOneTime = schedule.type === 'ONCE';
+
+            // Skip one-time schedules whose target date has already passed.
+            if (isOneTime && schedule.runDate) {
+                const target = new Date(schedule.runDate);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                target.setHours(0, 0, 0, 0);
+                if (target < today) {
+                    logger.warn(`[${server.name}] One-time schedule "${schedule.label}" is in the past. Disabling.`);
+                    schedule.active = false;
+                    persistConfig();
+                    return;
+                }
+            }
+
+            logger.info(`[${server.name}] Loaded Schedule: "${schedule.label}" (${schedule.cron})${isOneTime ? ' [ONE-TIME]' : ''}`);
 
             // Register the cron task
             const job = cron.schedule(schedule.cron, async () => {
+                // For one-time schedules, ensure the annual cron match is the intended date.
+                if (isOneTime && !isOneTimeDueToday(schedule)) {
+                    return;
+                }
+
                 // Hand off execution entirely to worker.js
                 await executeAttendanceTask(client, server, schedule, config.globalWebhookUrl);
+
+                // One-time schedules fire exactly once: disable, persist, and stop the timer.
+                if (isOneTime) {
+                    schedule.active = false;
+                    persistConfig();
+                    job.stop();
+                    logger.success(`[${server.name}] One-time schedule "${schedule.label}" completed and disabled.`);
+                }
             });
 
             activeJobs.push(job);
