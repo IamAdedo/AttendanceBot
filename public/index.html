@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AttendanceBot Dashboard</title>
+  <meta name="description" content="Multi-server Discord daily attendance background daemon and web management control panel." />
+  <!-- Theme Early Initializer (Prevents FOUC) -->
+  <script>
+    (function() {
+      try {
+        const savedTheme = localStorage.getItem('attendancebot_theme');
+        if (savedTheme === 'light') {
+          document.documentElement.classList.add('light');
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            discord: {
+              blurple: '#5865F2',
+              green: '#57F287',
+              yellow: '#FEE75C',
+              fuchsia: '#EB459E',
+              red: '#ED4245',
+              dark: 'rgb(var(--discord-dark-rgb) / <alpha-value>)',
+              darker: 'rgb(var(--discord-darker-rgb) / <alpha-value>)',
+              card: 'rgb(var(--discord-card-rgb) / <alpha-value>)',
+              border: 'rgb(var(--discord-border-rgb) / <alpha-value>)',
+              text: 'rgb(var(--discord-text-rgb) / <alpha-value>)',
+              muted: 'rgb(var(--discord-muted-rgb) / <alpha-value>)'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root, html.dark {
+      /* Dark Theme Palettes (Default) */
+      --discord-dark-rgb: 30 31 34;        /* #1e1f22 Card headers & containers */
+      --discord-darker-rgb: 17 18 20;      /* #111214 Immersive deep app background */
+      --discord-card-rgb: 43 45 49;        /* #2b2d31 Distinct elevated card surfaces */
+      --discord-border-rgb: 56 58 64;      /* #383a40 High-contrast crisp dark borders */
+      --discord-text-rgb: 242 243 245;     /* #f2f3f5 Clean, bright, legible text */
+      --discord-muted-rgb: 158 165 174;    /* #9ea5ae Clear readable secondary text */
+      --scrollbar-track: #111214;
+      --scrollbar-thumb: #383a40;
+      --scrollbar-thumb-hover: #4e5058;
+    }
+
+    html.light {
+      /* Light Theme Palettes */
+      --discord-dark-rgb: 255 255 255;     /* Crisp white card and header surfaces */
+      --discord-darker-rgb: 241 245 249;   /* #f1f5f9 Clean light background */
+      --discord-card-rgb: 248 250 252;     /* #f8fafc Light card surface */
+      --discord-border-rgb: 226 232 240;   /* #e2e8f0 Crisp sharp border */
+      --discord-text-rgb: 15 23 42;        /* #0f172a High-contrast charcoal */
+      --discord-muted-rgb: 71 85 105;      /* #475569 High-contrast secondary text */
+      --scrollbar-track: #f1f5f9;
+      --scrollbar-thumb: #cbd5e1;
+      --scrollbar-thumb-hover: #94a3b8;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+    ::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+    /* Server Card Entrance Animations */
+    @keyframes serverRowEntrance {
+      0% {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .server-card-animate {
+      animation: serverRowEntrance 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    /* Explicit Dark Theme Rules (Deep, rich, non-washed-out dark theme) */
+    html.dark body,
+    html:not(.light) body {
+      background-color: #111214 !important;
+      color: #f2f3f5 !important;
+    }
+
+    html.dark .bg-discord-dark,
+    html:not(.light) .bg-discord-dark {
+      background-color: #1e1f22 !important;
+    }
+
+    html.dark .bg-discord-darker,
+    html:not(.light) .bg-discord-darker {
+      background-color: #111214 !important;
+    }
+
+    html.dark .bg-discord-card,
+    html:not(.light) .bg-discord-card {
+      background-color: #2b2d31 !important;
+    }
+
+    html.dark .border-discord-border,
+    html:not(.light) .border-discord-border {
+      border-color: #383a40 !important;
+    }
+
+    html.dark .text-discord-text,
+    html:not(.light) .text-discord-text {
+      color: #f2f3f5 !important;
+    }
+
+    html.dark .text-discord-muted,
+    html:not(.light) .text-discord-muted {
+      color: #949ba4 !important;
+    }
+
+    html.dark h1,
+    html.dark h2,
+    html.dark h3,
+    html.dark h4,
+    html.dark h5,
+    html.dark h6,
+    html:not(.light) h1,
+    html:not(.light) h2,
+    html:not(.light) h3,
+    html:not(.light) h4,
+    html:not(.light) h5,
+    html:not(.light) h6 {
+      color: #ffffff !important;
+    }
+
+    html.dark .text-white,
+    html:not(.light) .text-white {
+      color: #ffffff !important;
+    }
+
+    /* Dark Mode Buttons */
+    html.dark button.bg-discord-card,
+    html:not(.light) button.bg-discord-card {
+      background-color: #2b2d31 !important;
+      color: #f2f3f5 !important;
+      border-color: #383a40 !important;
+    }
+
+    html.dark button.bg-discord-card:hover,
+    html:not(.light) button.bg-discord-card:hover {
+      background-color: #35373c !important;
+      color: #ffffff !important;
+      border-color: #4e5058 !important;
+    }
+
+    /* Dark Mode Inputs, Selects, and Textareas */
+    html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    html.dark select,
+    html.dark textarea,
+    html:not(.light) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    html:not(.light) select,
+    html:not(.light) textarea {
+      background-color: #111214 !important;
+      color: #f2f3f5 !important;
+      border-color: #383a40 !important;
+    }
+
+    html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+    html.dark select:focus,
+    html.dark textarea:focus,
+    html:not(.light) input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+    html:not(.light) select:focus,
+    html:not(.light) textarea:focus {
+      border-color: #5865F2 !important;
+      outline: none !important;
+    }
+
+    html.dark select option,
+    html:not(.light) select option {
+      background-color: #1e1f22 !important;
+      color: #f2f3f5 !important;
+    }
+
+    html.dark input::placeholder,
+    html.dark textarea::placeholder,
+    html:not(.light) input::placeholder,
+    html:not(.light) textarea::placeholder {
+      color: #6d727a !important;
+    }
+
+    html.dark kbd,
+    html:not(.light) kbd {
+      background-color: #1e1f22 !important;
+      color: #dbdee1 !important;
+      border-color: #383a40 !important;
+    }
+
+    /* Dark Mode Modal Dialogs */
+    html.dark .bg-discord-dark.border-discord-border,
+    html:not(.light) .bg-discord-dark.border-discord-border {
+      background-color: #1e1f22 !important;
+      border-color: #383a40 !important;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Light Theme Global Text, Heading & Element Contrast Overrides */
+    html.light body {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+
+    html.light h1,
+    html.light h2,
+    html.light h3,
+    html.light h4,
+    html.light h5,
+    html.light h6,
+    html.light strong,
+    html.light b {
+      color: #0f172a !important;
+    }
+
+    /* Non-button text-white overrides */
+    html.light .text-white:not(button):not(button *):not(.keep-white):not([class*="bg-discord-blurple"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-amber"]) {
+      color: #0f172a !important;
+    }
+
+    /* Buttons with neutral/card/dark backgrounds should have dark text and clean hover */
+    html.light button.bg-discord-card,
+    html.light button.bg-discord-dark,
+    html.light button.bg-transparent,
+    html.light button:not([class*="bg-discord-blurple"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-amber"]) {
+      color: #1e293b !important;
+    }
+
+    html.light button.bg-discord-card:hover,
+    html.light button.bg-discord-dark:hover,
+    html.light button:not([class*="bg-discord-blurple"]):not([class*="bg-indigo"]):not([class*="bg-emerald"]):not([class*="bg-rose"]):not([class*="bg-red"]):not([class*="bg-amber"]):hover {
+      background-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+
+    /* Buttons with colored backgrounds stay crisp white */
+    html.light .bg-discord-blurple,
+    html.light .bg-discord-blurple *,
+    html.light .bg-emerald-600,
+    html.light .bg-emerald-600 *,
+    html.light .bg-rose-600,
+    html.light .bg-rose-600 * {
+      color: #ffffff !important;
+    }
+
+    /* Active tab button styling */
+    html.light .tab-btn.border-discord-blurple {
+      color: #4338ca !important;
+      border-color: #5865F2 !important;
+    }
+    html.light .tab-btn:not(.border-discord-blurple) {
+      color: #64748b !important;
+    }
+    html.light .tab-btn:not(.border-discord-blurple):hover {
+      color: #0f172a !important;
+    }
+
+    /* Muted and secondary text visibility */
+    html.light .text-discord-muted {
+      color: #475569 !important;
+    }
+    html.light .mono {
+      color: #1e293b !important;
+    }
+
+    /* Fix light gray text classes that were washed out / invisible in light mode */
+    html.light .text-gray-100,
+    html.light .text-gray-200,
+    html.light .text-gray-300,
+    html.light .text-slate-200,
+    html.light .text-slate-300,
+    html.light .text-zinc-200,
+    html.light .text-zinc-300 {
+      color: #1e293b !important;
+    }
+
+    html.light .text-gray-400,
+    html.light .text-slate-400,
+    html.light .text-zinc-400 {
+      color: #475569 !important;
+    }
+
+    /* Fix pastel color text in light mode for AA contrast */
+    html.light .text-indigo-200,
+    html.light .text-indigo-300,
+    html.light .text-indigo-400 {
+      color: #4338ca !important;
+    }
+
+    html.light .text-emerald-200,
+    html.light .text-emerald-300,
+    html.light .text-emerald-400 {
+      color: #047857 !important;
+    }
+
+    html.light .text-rose-200,
+    html.light .text-rose-300,
+    html.light .text-rose-400 {
+      color: #be123c !important;
+    }
+
+    html.light .text-amber-100,
+    html.light .text-amber-200,
+    html.light .text-amber-300,
+    html.light .text-amber-400 {
+      color: #b45309 !important;
+    }
+
+    /* Tables and list rows */
+    html.light table thead tr th {
+      color: #475569 !important;
+      font-weight: 700 !important;
+      border-color: #e2e8f0 !important;
+    }
+    html.light table tbody tr {
+      border-color: #e2e8f0 !important;
+    }
+    html.light table tbody tr:hover {
+      background-color: #f1f5f9 !important;
+    }
+    html.light table tbody td {
+      color: #1e293b !important;
+    }
+    html.light table tbody td .text-white {
+      color: #0f172a !important;
+    }
+
+    /* Alerts, Health & Conflict Boxes in Light Mode */
+    html.light .bg-amber-500\/10,
+    html.light .bg-amber-500\/20 {
+      background-color: #fffbeb !important;
+      border-color: #fde047 !important;
+      color: #92400e !important;
+    }
+    html.light .bg-amber-500\/10 *,
+    html.light .bg-amber-500\/20 * {
+      color: #92400e !important;
+    }
+    html.light .bg-amber-500\/10 strong,
+    html.light .bg-amber-500\/20 strong,
+    html.light .bg-amber-500\/10 span.text-white,
+    html.light .bg-amber-500\/20 span.text-white {
+      color: #78350f !important;
+    }
+
+    html.light .bg-rose-500\/10,
+    html.light .bg-rose-500\/15 {
+      background-color: #fff1f2 !important;
+      border-color: #fecdd3 !important;
+      color: #9f1239 !important;
+    }
+    html.light .bg-rose-500\/10 *,
+    html.light .bg-rose-500\/15 * {
+      color: #9f1239 !important;
+    }
+
+    html.light .bg-emerald-500\/5,
+    html.light .bg-emerald-500\/10,
+    html.light .bg-emerald-500\/15 {
+      background-color: #f0fdf4 !important;
+      border-color: #bbf7d0 !important;
+    }
+
+    html.light .bg-black\/30 {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    /* Inputs, Selects, and Textareas */
+    html.light input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+    html.light select,
+    html.light textarea {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd5e1 !important;
+    }
+
+    html.light select option {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+    }
+
+    html.light input::placeholder,
+    html.light textarea::placeholder {
+      color: #94a3b8 !important;
+    }
+
+    html.light kbd {
+      background-color: #e2e8f0 !important;
+      color: #1e293b !important;
+      border-color: #cbd5e1 !important;
+    }
+
+    /* Modal Dialogs */
+    html.light .bg-discord-dark.border-discord-border {
+      background-color: #ffffff !important;
+      border-color: #e2e8f0 !important;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Terminal Console remains dark for high contrast syntax and log visibility */
+    #logsConsole {
+      background-color: #111214 !important;
+      border-color: #383a40 !important;
+      color: #e5e7eb !important;
+    }
+    html.light #logsConsole {
+      border-color: #cbd5e1 !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+  </style>
+</head>
+<body class="bg-discord-darker text-discord-text min-h-screen flex flex-col antialiased">
+
+  <!-- TOP NAVIGATION HEADER -->
+  <header class="bg-discord-dark border-b border-discord-border sticky top-0 z-40 px-4 sm:px-6 py-3.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-discord-blurple flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-discord-blurple/20">
+          ⚡
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-black text-lg text-white tracking-wide">AttendanceBot</h1>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-discord-blurple/20 text-indigo-300 font-semibold border border-discord-blurple/30">v2.1.0</span>
+          </div>
+          <p class="text-xs text-discord-muted">By IamAdedo, dlazyHNTR • Discord Multi-Server Automation</p>
+        </div>
+      </div>
+
+      <!-- DAEMON CONTROLS & STATUS -->
+      <div class="flex items-center space-x-3">
+        <div id="daemonStatusBadge" class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border text-xs font-medium">
+          <span id="statusIndicatorDot" class="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
+          <span id="statusIndicatorText" class="text-gray-300">Checking status...</span>
+        </div>
+
+        <button id="toggleDaemonBtn" onclick="toggleDaemon()" class="flex items-center space-x-2 px-4 py-1.5 rounded-lg text-xs font-semibold shadow transition duration-150 bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer">
+          <i id="toggleDaemonIcon" class="fa-solid fa-play"></i>
+          <span id="toggleDaemonText">Start Daemon</span>
+        </button>
+
+        <!-- DESKTOP NOTIFICATIONS TOGGLE -->
+        <button id="desktopNotificationBtn" onclick="toggleDesktopNotifications()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border transition cursor-pointer" title="Enable browser desktop notifications on completed attendance tasks">
+          <i id="desktopNotificationIcon" class="fa-solid fa-bell text-gray-400"></i>
+          <span id="desktopNotificationText" class="hidden sm:inline">Desktop Alerts</span>
+          <span id="desktopNotificationBadge" class="w-2 h-2 rounded-full bg-gray-500"></span>
+        </button>
+
+        <button onclick="triggerTestWebhookModal()" class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border transition cursor-pointer">
+          <i class="fa-solid fa-paper-plane text-discord-blurple"></i>
+          <span>Test Webhook</span>
+        </button>
+
+        <!-- THEME TOGGLE (DARK / LIGHT) -->
+        <button id="themeToggleBtn" onclick="toggleTheme()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border transition cursor-pointer" title="Toggle Dark / Light theme (persisted in user settings)">
+          <i id="themeToggleIcon" class="fa-solid fa-sun text-amber-400"></i>
+          <span id="themeToggleText" class="hidden sm:inline">Light Mode</span>
+        </button>
+
+        <!-- KEYBOARD SHORTCUTS REFERENCE BUTTON -->
+        <button onclick="openShortcutsModal()" class="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-discord-card hover:bg-discord-border text-discord-muted hover:text-white border border-discord-border transition cursor-pointer" title="Keyboard Shortcuts (Ctrl+/ or ?)">
+          <i class="fa-regular fa-keyboard"></i>
+          <span class="hidden md:inline mono text-[11px] bg-discord-dark px-1.5 py-0.5 rounded border border-discord-border/60">?</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 space-y-6">
+
+    <!-- OVERVIEW STATS ROW -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="bg-discord-dark rounded-xl p-4 border border-discord-border flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-discord-muted uppercase tracking-wider">Discord Account</p>
+          <p id="statAccount" class="text-sm font-bold text-white mt-1">Not Connected</p>
+          <p id="statAccountSub" class="text-xs text-discord-muted mt-0.5">Token required</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-discord-blurple flex items-center justify-center text-lg">
+          <i class="fa-brands fa-discord"></i>
+        </div>
+      </div>
+
+      <div class="bg-discord-dark rounded-xl p-4 border border-discord-border flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-discord-muted uppercase tracking-wider">Active Servers</p>
+          <p id="statServers" class="text-xl font-bold text-white mt-1">0</p>
+          <p id="statServersSub" class="text-xs text-discord-muted mt-0.5">0 total profiles</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-server"></i>
+        </div>
+      </div>
+
+      <div class="bg-discord-dark rounded-xl p-4 border border-discord-border flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-discord-muted uppercase tracking-wider">Active Schedules</p>
+          <p id="statSchedules" class="text-xl font-bold text-white mt-1">0</p>
+          <p id="statSchedulesSub" class="text-xs text-discord-muted mt-0.5">0 total timers</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-lg">
+          <i class="fa-regular fa-clock"></i>
+        </div>
+      </div>
+
+      <div class="bg-discord-dark rounded-xl p-4 border border-discord-border flex items-center justify-between">
+        <div>
+          <p class="text-xs font-medium text-discord-muted uppercase tracking-wider">Webhook Alerts</p>
+          <p id="statWebhook" class="text-sm font-bold text-white mt-1">Disabled</p>
+          <p id="statWebhookSub" class="text-xs text-discord-muted mt-0.5">No URL set</p>
+        </div>
+        <div class="w-10 h-10 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-bell"></i>
+        </div>
+      </div>
+    </div>
+
+    <!-- DAILY ATTENDANCE TARGET & PROGRESS SECTION -->
+    <div class="bg-discord-dark rounded-xl border border-discord-border p-4 sm:p-5 shadow-sm space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-discord-blurple flex items-center justify-center text-lg shrink-0">
+            <i class="fa-solid fa-bullseye"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-base font-bold text-white">Daily Attendance Target</h3>
+              <span id="dailyTargetBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 inline-flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                <span id="dailyTargetBadgeText">In Progress</span>
+              </span>
+            </div>
+            <p class="text-xs text-discord-muted mt-0.5">
+              Set a daily goal for how many attendance check-ins to perform, and track today's completion progress in real time.
+            </p>
+          </div>
+        </div>
+
+        <!-- Target Setting Controls -->
+        <div class="flex items-center space-x-2 self-start sm:self-center">
+          <span class="text-xs text-discord-muted font-medium">Daily Goal:</span>
+          <div class="flex items-center rounded-lg border border-discord-border bg-discord-darker px-2.5 py-1">
+            <input
+              type="number"
+              id="dailyTargetInput"
+              min="1"
+              max="500"
+              value="10"
+              onchange="handleDailyTargetChange(this.value)"
+              class="w-14 bg-transparent text-sm font-bold text-white text-center focus:outline-none mono"
+              title="Enter your daily attendance check-in goal"
+            />
+            <span class="text-xs text-discord-muted ml-1">runs</span>
+          </div>
+          <button
+            onclick="promptCustomDailyTarget()"
+            title="Adjust Daily Target Goal"
+            class="px-2.5 py-1.5 rounded-lg bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border text-xs font-semibold transition cursor-pointer"
+          >
+            <i class="fa-solid fa-pen-to-square mr-1"></i> Edit
+          </button>
+        </div>
+      </div>
+
+      <!-- Progress Bar & Completion Statistics -->
+      <div class="space-y-1.5 pt-1">
+        <div class="flex items-center justify-between text-xs">
+          <span id="dailyTargetStatusText" class="font-medium text-white">
+            <strong id="dailyTargetCurrent" class="text-emerald-400 font-bold mono">0</strong> of <strong id="dailyTargetGoal" class="text-white font-bold mono">10</strong> check-ins completed today
+          </span>
+          <span id="dailyTargetPercent" class="font-bold text-discord-blurple mono">0%</span>
+        </div>
+        <div class="w-full bg-discord-darker border border-discord-border h-3.5 rounded-full overflow-hidden p-0.5 relative shadow-inner">
+          <div
+            id="dailyTargetProgressBar"
+            class="h-full rounded-full bg-gradient-to-r from-discord-blurple to-indigo-500 transition-all duration-500 ease-out"
+            style="width: 0%;"
+          ></div>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-discord-muted pt-0.5">
+          <span id="dailyTargetRemainingText">10 more check-in(s) needed to reach today's target.</span>
+          <span class="mono" id="dailyTargetDateText">Today: Active</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 30-DAY ATTENDANCE CHECK-INS RECHARTS LINE CHART -->
+    <div class="bg-discord-dark rounded-xl border border-discord-border p-4 sm:p-5 space-y-4 shadow-sm">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-discord-border/60 pb-3.5">
+        <div>
+          <div class="flex items-center space-x-2">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-discord-blurple"></i>
+              <span>30-Day Attendance Check-ins Overview</span>
+            </h2>
+            <span class="text-[11px] px-2 py-0.5 rounded-full bg-discord-card text-emerald-400 font-semibold border border-discord-border">Recharts</span>
+          </div>
+          <p class="text-xs text-discord-muted mt-0.5">
+            Daily automated message dispatches and reaction check-ins performed across your configured servers over the last 30 days.
+          </p>
+        </div>
+
+        <!-- 30-Day Metric Badges -->
+        <div class="flex items-center flex-wrap gap-2 text-xs">
+          <div class="px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border flex items-center space-x-2">
+            <span class="text-discord-muted">30d Total:</span>
+            <span id="chartTotalCheckins" class="font-bold text-white mono">-</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border flex items-center space-x-2">
+            <span class="text-discord-muted">Successful:</span>
+            <span id="chartTotalSuccess" class="font-bold text-emerald-400 mono">-</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border flex items-center space-x-2">
+            <span class="text-discord-muted">Failed:</span>
+            <span id="chartTotalFailed" class="font-bold text-rose-400 mono">-</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border flex items-center space-x-2">
+            <span class="text-discord-muted">Success Rate:</span>
+            <span id="chartSuccessRate" class="font-bold text-emerald-400 mono">-</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border flex items-center space-x-2">
+            <span class="text-discord-muted">Daily Avg:</span>
+            <span id="chartAvgDaily" class="font-bold text-indigo-300 mono">-</span>
+          </div>
+          <div class="px-3 py-1.5 rounded-lg bg-discord-card border border-discord-border flex items-center space-x-2">
+            <span class="text-discord-muted">Peak Day:</span>
+            <span id="chartPeakDay" class="font-bold text-discord-yellow mono">-</span>
+          </div>
+          <button onclick="refreshCheckinStats()" title="Refresh Chart Data" class="p-1.5 px-2 rounded-lg bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border transition cursor-pointer">
+            <i id="refreshChartIcon" class="fa-solid fa-arrows-rotate text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Recharts Canvas Mount Container -->
+      <div id="rechartsOverviewContainer" class="w-full h-64 sm:h-72">
+        <div class="w-full h-full flex flex-col items-center justify-center text-xs text-discord-muted space-y-2">
+          <i class="fa-solid fa-circle-notch fa-spin text-discord-blurple text-base"></i>
+          <span>Loading 30-day attendance metrics via Recharts...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABS BAR -->
+    <div class="border-b border-discord-border flex space-x-2 sm:space-x-4 overflow-x-auto">
+      <button onclick="switchTab('servers')" id="tabBtn-servers" class="tab-btn px-4 py-2.5 text-sm font-semibold border-b-2 border-discord-blurple text-white flex items-center space-x-2 whitespace-nowrap cursor-pointer">
+        <i class="fa-solid fa-layer-group"></i>
+        <span>Server Profiles & Schedules</span>
+      </button>
+      <button onclick="switchTab('credentials')" id="tabBtn-credentials" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-discord-muted hover:text-white flex items-center space-x-2 whitespace-nowrap cursor-pointer">
+        <i class="fa-solid fa-key"></i>
+        <span>Credentials & Webhook</span>
+      </button>
+      <button onclick="switchTab('logs')" id="tabBtn-logs" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-discord-muted hover:text-white flex items-center space-x-2 whitespace-nowrap cursor-pointer">
+        <i class="fa-solid fa-terminal"></i>
+        <span>Live Activity Console</span>
+      </button>
+      <button onclick="switchTab('guide')" id="tabBtn-guide" class="tab-btn px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-discord-muted hover:text-white flex items-center space-x-2 whitespace-nowrap cursor-pointer">
+        <i class="fa-solid fa-book-open"></i>
+        <span>CLI & Termux Guide</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: SERVER PROFILES & SCHEDULES -->
+    <section id="tab-servers" class="tab-content space-y-5">
+      <!-- Section Header with Bulk Actions & Tools -->
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>Configured Discord Servers</span>
+            <span id="serverCountBadge" class="text-xs font-semibold px-2 py-0.5 rounded-full bg-discord-card text-discord-muted border border-discord-border">0</span>
+          </h2>
+          <p class="text-xs text-discord-muted">Manage channels and automated attendance schedules for each community.</p>
+        </div>
+
+        <!-- Action Controls Group -->
+        <div class="flex flex-wrap items-center gap-2">
+          <!-- Bulk Monitoring Toggles -->
+          <div class="flex items-center rounded-lg border border-discord-border bg-discord-dark p-0.5 shadow-sm">
+            <button id="enableAllServersBtn" onclick="toggleAllServers(true)" title="Resume monitoring on all configured servers" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-emerald-400 hover:bg-emerald-500/10 transition cursor-pointer">
+              <i class="fa-solid fa-play text-[11px]"></i>
+              <span>Enable All</span>
+            </button>
+            <div class="w-px h-4 bg-discord-border"></div>
+            <button id="disableAllServersBtn" onclick="toggleAllServers(false)" title="Pause monitoring on all configured servers" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-amber-400 hover:bg-amber-500/10 transition cursor-pointer">
+              <i class="fa-solid fa-pause text-[11px]"></i>
+              <span>Disable All</span>
+            </button>
+          </div>
+
+          <!-- Export & Import Buttons -->
+          <button id="exportConfigBtn" onclick="exportConfigJSON()" title="Export all server profiles and schedules as JSON" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-dark hover:bg-discord-card text-discord-text border border-discord-border transition cursor-pointer shadow-sm">
+            <i class="fa-solid fa-download text-discord-muted"></i>
+            <span>Export JSON</span>
+          </button>
+
+          <button id="importConfigBtn" onclick="triggerImportConfig()" title="Import server profiles and schedules from a JSON file" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-dark hover:bg-discord-card text-discord-text border border-discord-border transition cursor-pointer shadow-sm">
+            <i class="fa-solid fa-upload text-discord-muted"></i>
+            <span>Import JSON</span>
+          </button>
+
+          <!-- Hidden File Input for JSON Import -->
+          <input type="file" id="importFileInput" accept=".json,application/json" class="hidden" onchange="handleConfigFileSelected(event)" />
+
+          <!-- Add Server Profile Button -->
+          <button id="addServerBtn" onclick="openAddServerModal()" class="flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-discord-blurple hover:bg-indigo-600 text-white shadow transition cursor-pointer">
+            <i class="fa-solid fa-plus"></i>
+            <span>Add Server Profile</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search Bar & Filters Section -->
+      <div class="bg-discord-dark rounded-xl p-3 border border-discord-border flex flex-col md:flex-row items-center justify-between gap-3 shadow-sm">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:max-w-2xl">
+          <!-- Text Search -->
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-discord-muted text-xs"></i>
+            <input
+              type="text"
+              id="serverSearchInput"
+              placeholder="Search by server name or channel ID..."
+              oninput="handleServerSearch(this.value)"
+              class="w-full bg-discord-darker border border-discord-border rounded-lg pl-9 pr-8 py-2 text-xs text-white placeholder-discord-muted focus:outline-none focus:border-discord-blurple transition"
+            />
+            <button
+              id="clearSearchBtn"
+              type="button"
+              onclick="clearServerSearch()"
+              class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-discord-muted hover:text-white text-xs cursor-pointer p-1"
+              title="Clear search"
+            >
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          </div>
+
+          <!-- Status Filter Dropdown (Running, Failed, Disabled) -->
+          <div class="flex items-center space-x-1.5 shrink-0">
+            <span class="text-xs text-discord-muted hidden sm:inline">Status:</span>
+            <select
+              id="serverStatusFilter"
+              onchange="handleServerStatusFilter(this.value)"
+              class="bg-discord-darker border border-discord-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-discord-blurple cursor-pointer font-medium"
+              title="Filter servers by execution health status"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="RUNNING">🟢 Running</option>
+              <option value="FAILED">🔴 Failed</option>
+              <option value="DISABLED">⚪ Disabled</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-3 w-full md:w-auto justify-between md:justify-end text-xs text-discord-muted">
+          <span id="searchResultCount" class="font-medium">Loading servers...</span>
+        </div>
+      </div>
+
+      <!-- Bulk Selection Toolbar & Select All Row -->
+      <div id="bulkActionBar" class="bg-discord-dark rounded-xl px-4 py-2.5 border border-discord-border flex flex-wrap items-center justify-between gap-3 shadow-xs">
+        <div class="flex items-center space-x-3">
+          <label class="flex items-center space-x-2 text-xs font-semibold text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              id="selectAllServersCheckbox"
+              onchange="toggleSelectAllServers(this.checked)"
+              class="w-4 h-4 rounded bg-discord-darker border-discord-border text-discord-blurple focus:ring-0 cursor-pointer"
+            />
+            <span id="selectAllLabel">Select All</span>
+          </label>
+          <span id="bulkSelectedBadge" class="hidden text-xs font-bold px-2.5 py-0.5 rounded-full bg-discord-blurple/20 text-discord-blurple border border-discord-blurple/30">
+            0 selected
+          </span>
+        </div>
+
+        <!-- Bulk Action Buttons -->
+        <div id="bulkActionButtons" class="hidden flex-wrap items-center gap-2">
+          <button
+            onclick="bulkSetServersActive(true)"
+            title="Enable all selected server profiles"
+            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition cursor-pointer"
+          >
+            <i class="fa-solid fa-play text-[11px]"></i>
+            <span>Enable Selected</span>
+          </button>
+          <button
+            onclick="bulkSetServersActive(false)"
+            title="Pause/Disable all selected server profiles"
+            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition cursor-pointer"
+          >
+            <i class="fa-solid fa-pause text-[11px]"></i>
+            <span>Disable Selected</span>
+          </button>
+          <button
+            onclick="bulkDeleteSelectedServers()"
+            title="Permanently remove all selected server profiles"
+            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition cursor-pointer"
+          >
+            <i class="fa-solid fa-trash text-[11px]"></i>
+            <span>Delete Selected</span>
+          </button>
+          <button
+            onclick="clearServerSelection()"
+            title="Clear all selections"
+            class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-discord-card hover:bg-discord-border text-discord-muted border border-discord-border transition cursor-pointer"
+          >
+            Deselect
+          </button>
+        </div>
+      </div>
+
+      <div id="serverListContainer" class="space-y-4">
+        <!-- Rendered dynamically -->
+        <div class="bg-discord-dark rounded-xl p-8 text-center border border-discord-border">
+          <i class="fa-solid fa-spinner fa-spin text-2xl text-discord-blurple mb-3"></i>
+          <p class="text-sm text-discord-muted">Loading server profiles...</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: CREDENTIALS & WEBHOOK -->
+    <section id="tab-credentials" class="tab-content hidden space-y-6">
+      <div class="bg-discord-dark rounded-xl p-6 border border-discord-border space-y-6">
+        <div>
+          <h2 class="text-base font-bold text-white">Discord Credentials & Notification Dispatch</h2>
+          <p class="text-xs text-discord-muted mt-1">Configure your Discord account authorization token and notification webhook URL.</p>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Token Input -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-discord-muted mb-1.5">
+              Discord User Token <span class="text-rose-400">*</span>
+            </label>
+            <div class="relative">
+              <input type="password" id="inputGlobalToken" placeholder="Paste your Discord User Token here..." class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-discord-blurple pr-10 mono" />
+              <button type="button" onclick="toggleTokenVisibility()" class="absolute right-3 top-2.5 text-discord-muted hover:text-white text-sm cursor-pointer">
+                <i id="tokenEyeIcon" class="fa-regular fa-eye"></i>
+              </button>
+            </div>
+            <div class="mt-2 text-xs text-discord-muted space-y-1 bg-discord-card/50 p-3 rounded-lg border border-discord-border/60">
+              <p class="font-semibold text-gray-300"><i class="fa-solid fa-circle-info text-discord-blurple mr-1"></i> How to obtain your token:</p>
+              <p>1. Open Discord in your browser or desktop app, press <kbd class="px-1.5 py-0.5 bg-discord-darker rounded border border-discord-border text-gray-200">F12</kbd> or <kbd class="px-1.5 py-0.5 bg-discord-darker rounded border border-discord-border text-gray-200">Ctrl+Shift+I</kbd>.</p>
+              <p>2. Open the <strong>Console</strong> tab, inspect network or run the token extraction snippet.</p>
+              <p class="text-amber-400/90 font-medium">⚠️ Never share your token with untrusted parties. It grants full user account interaction.</p>
+            </div>
+          </div>
+
+          <!-- Webhook Input -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-discord-muted mb-1.5">
+              Global Discord Webhook URL (Optional)
+            </label>
+            <div class="flex gap-2">
+              <input type="url" id="inputGlobalWebhook" placeholder="https://discord.com/api/webhooks/..." class="flex-1 bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-discord-blurple mono" />
+              <button type="button" onclick="testGlobalWebhook()" class="px-4 py-2.5 bg-discord-card hover:bg-discord-border border border-discord-border rounded-lg text-xs font-semibold text-white whitespace-nowrap transition cursor-pointer">
+                <i class="fa-solid fa-paper-plane mr-1.5 text-discord-blurple"></i> Test
+              </button>
+            </div>
+            <p class="text-xs text-discord-muted mt-1.5">Receive immediate notifications on your phone whenever attendance posts or rate limits occur.</p>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-discord-border flex items-center justify-between">
+          <span id="credentialsSaveNotice" class="text-xs text-emerald-400 hidden font-medium">
+            <i class="fa-solid fa-check mr-1"></i> Configuration saved successfully!
+          </span>
+          <button onclick="saveCredentialsSettings()" class="ml-auto px-5 py-2.5 bg-discord-blurple hover:bg-indigo-600 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer">
+            Save Credentials
+          </button>
+        </div>
+      </div>
+
+      <!-- LOCAL AUTO-BACKUP & RECOVERY SETTINGS CARD -->
+      <div class="bg-discord-dark rounded-xl p-6 border border-discord-border space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-discord-border/60 pb-3.5">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center justify-center text-lg shrink-0">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-base font-bold text-white">Local Configuration Auto-Backup</h3>
+                <span id="autoBackupStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Active (Auto-save every 60s)</span>
+                </span>
+              </div>
+              <p class="text-xs text-discord-muted mt-0.5">
+                Periodically saves offline snapshots of your entire configuration to browser localStorage for instant session recovery.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2 self-start sm:self-center">
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="autoBackupToggle" onchange="handleAutoBackupToggle(this.checked)" checked class="sr-only peer" />
+              <div class="w-9 h-5 bg-discord-card peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+              <span class="ml-2 text-xs font-semibold text-white">Auto-Backup</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+          <div class="p-3 rounded-lg bg-discord-card/50 border border-discord-border/60 space-y-1">
+            <span class="text-discord-muted">Last Local Backup</span>
+            <p id="lastAutoBackupTime" class="font-bold text-white mono text-xs">Not saved yet</p>
+          </div>
+          <div class="p-3 rounded-lg bg-discord-card/50 border border-discord-border/60 space-y-1">
+            <span class="text-discord-muted">Backed-up Content</span>
+            <p id="backedUpServerCount" class="font-bold text-emerald-400 mono text-xs">0 servers / 0 schedules</p>
+          </div>
+          <div class="p-3 rounded-lg bg-discord-card/50 border border-discord-border/60 space-y-1">
+            <span class="text-discord-muted">Storage Destination</span>
+            <p class="font-bold text-discord-text mono text-xs">Browser localStorage</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2">
+          <p class="text-xs text-discord-muted">
+            <i class="fa-solid fa-shield-halved text-emerald-400 mr-1"></i>
+            Snapshots are stored offline inside your local browser storage for instant recovery if server state is cleared.
+          </p>
+          <div class="flex flex-wrap items-center space-x-2">
+            <button onclick="triggerManualBackup()" class="px-3 py-1.5 bg-discord-card hover:bg-discord-border border border-discord-border rounded-lg text-xs font-semibold text-white transition cursor-pointer">
+              <i class="fa-solid fa-floppy-disk mr-1 text-discord-blurple"></i> Backup Now
+            </button>
+            <button id="downloadBackupJsonBtn" onclick="downloadConfigBackupJson()" class="px-3 py-1.5 bg-discord-card hover:bg-discord-border border border-discord-border rounded-lg text-xs font-semibold text-white transition cursor-pointer" title="Download current configuration snapshot as a JSON file">
+              <i class="fa-solid fa-download mr-1 text-indigo-400"></i> Download JSON
+            </button>
+            <button onclick="restoreFromLocalBackup()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold shadow transition cursor-pointer">
+              <i class="fa-solid fa-rotate-left mr-1"></i> Restore from Auto-Backup
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: LIVE ACTIVITY CONSOLE -->
+    <section id="tab-logs" class="tab-content hidden space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <span>Daemon Activity Log</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          </h2>
+          <p class="text-xs text-discord-muted">Real-time terminal output, schedule countdowns, and execution dispatches.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span id="logSessionCountBadge" class="hidden sm:inline text-[11px] px-2.5 py-1 rounded-lg bg-discord-card border border-discord-border text-discord-muted font-mono" title="Entries logged during current session">
+            0 logs
+          </span>
+          <label class="flex items-center space-x-1.5 text-xs text-discord-muted cursor-pointer select-none px-1">
+            <input type="checkbox" id="autoScrollCheck" checked class="rounded bg-discord-card border-discord-border text-discord-blurple focus:ring-0" />
+            <span>Auto-scroll</span>
+          </label>
+          <button id="exportLogsCsvBtn" onclick="exportLogsToCsv()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-card hover:bg-discord-border text-discord-text hover:text-white border border-discord-border transition cursor-pointer" title="Export activity log entries for the current session as a CSV file for external analysis">
+            <i class="fa-solid fa-file-csv text-emerald-400"></i>
+            <span>Export CSV</span>
+          </button>
+          <button onclick="clearLogs()" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-discord-card hover:bg-discord-border text-discord-muted hover:text-white border border-discord-border transition cursor-pointer">
+            <i class="fa-solid fa-trash-can mr-1"></i> Clear Logs
+          </button>
+        </div>
+      </div>
+
+      <!-- LOG SEARCH & FILTER BAR -->
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-discord-dark p-2.5 rounded-xl border border-discord-border">
+        <div class="flex-1 min-w-[240px] relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-discord-muted text-xs"></i>
+          <input
+            type="text"
+            id="logSearchInput"
+            oninput="handleLogSearchInput(this.value)"
+            placeholder="Search activity logs (e.g. error, check-in, token, channel, schedule)..."
+            class="w-full bg-discord-darker border border-discord-border rounded-lg pl-8 pr-8 py-1.5 text-xs text-discord-text focus:outline-none focus:border-discord-blurple transition"
+          />
+          <button
+            id="clearLogSearchBtn"
+            onclick="clearLogSearch()"
+            class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-discord-muted hover:text-white text-xs cursor-pointer"
+            title="Clear search"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="flex items-center space-x-2 shrink-0">
+          <select
+            id="logLevelFilter"
+            onchange="handleLogLevelFilter(this.value)"
+            class="bg-discord-darker border border-discord-border rounded-lg px-2.5 py-1.5 text-xs text-discord-text focus:outline-none focus:border-discord-blurple cursor-pointer"
+            title="Filter by Log Level"
+          >
+            <option value="ALL">All Levels</option>
+            <option value="INFO">INFO Only</option>
+            <option value="SUCCESS">SUCCESS Only</option>
+            <option value="WARN">WARN Only</option>
+            <option value="ERROR">ERROR Only</option>
+          </select>
+          <span id="logFilterMatchStatus" class="text-xs text-discord-muted mono shrink-0 hidden sm:inline"></span>
+        </div>
+      </div>
+
+      <div id="logsConsole" class="bg-black/80 border border-discord-border rounded-xl p-4 h-[460px] overflow-y-auto mono text-xs leading-relaxed space-y-1 text-gray-300">
+        <p class="text-discord-muted italic">Connecting to AttendanceBot event stream...</p>
+      </div>
+    </section>
+
+    <!-- TAB 4: CLI & SYSTEM GUIDE -->
+    <section id="tab-guide" class="tab-content hidden space-y-6">
+      <div class="bg-discord-dark rounded-xl p-6 border border-discord-border space-y-6">
+        <div>
+          <h2 class="text-base font-bold text-white">AttendanceBot Ecosystem & Background Daemon</h2>
+          <p class="text-xs text-discord-muted mt-1">Overview of architecture, anti-detection mechanisms, and terminal deployment options.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-discord-card/50 p-4 rounded-xl border border-discord-border/60 space-y-2">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-dice text-amber-400"></i>
+              <span>Anti-Detection Jitter</span>
+            </h3>
+            <p class="text-xs text-discord-muted">
+              AttendanceBot uses randomized delay jitter (default 1-10 minutes) before firing. Discord's automated pattern algorithms detect check-ins that trigger at the exact zero second mark every day. Jitter breaks the temporal signature and preserves account longevity.
+            </p>
+          </div>
+
+          <div class="bg-discord-card/50 p-4 rounded-xl border border-discord-border/60 space-y-2">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-keyboard text-discord-blurple"></i>
+              <span>Human Typing Simulation</span>
+            </h3>
+            <p class="text-xs text-discord-muted">
+              Before message submission, AttendanceBot broadcasts typing indicators (`sendTyping()`) with human-calibrated duration (1.5s base + 100ms per character) simulating natural keystroke pacing.
+            </p>
+          </div>
+
+          <div class="bg-discord-card/50 p-4 rounded-xl border border-discord-border/60 space-y-2">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-mobile-screen-button text-emerald-400"></i>
+              <span>Android (Termux No-Root)</span>
+            </h3>
+            <p class="text-xs text-discord-muted">
+              AttendanceBot includes full support for unrooted Android devices running Termux. The daemon acquires a wake lock through <code class="text-gray-200">termux-wake-lock</code> to avoid sleep-state suspension and hooks into <code class="text-gray-200">~/.termux/boot/</code> for auto-resurrection on reboot.
+            </p>
+          </div>
+
+          <div class="bg-discord-card/50 p-4 rounded-xl border border-discord-border/60 space-y-2">
+            <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+              <i class="fa-solid fa-terminal text-rose-400"></i>
+              <span>CLI Commands Reference</span>
+            </h3>
+            <div class="text-xs text-discord-muted space-y-1 mono">
+              <p><span class="text-discord-blurple">npm start</span> - Interactive setup wizard</p>
+              <p><span class="text-discord-blurple">npm run bot:daemon</span> - Run bot daemon directly</p>
+              <p><span class="text-discord-blurple">npm run service:install</span> - Register PM2 daemon</p>
+              <p><span class="text-discord-blurple">npm run service:status</span> - Check PM2 service health</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL: ADD / EDIT SERVER -->
+  <div id="serverModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-discord-dark border border-discord-border rounded-xl max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 id="serverModalTitle" class="text-base font-bold text-white">Add Server Profile</h3>
+        <button onclick="closeServerModal()" class="text-discord-muted hover:text-white text-lg cursor-pointer">&times;</button>
+      </div>
+
+      <form id="serverForm" onsubmit="handleSaveServer(event)" class="space-y-4">
+        <input type="hidden" id="modalServerId" />
+
+        <div>
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Server Profile Name <span class="text-rose-400">*</span></label>
+          <input type="text" id="modalServerName" placeholder="e.g. Work-DAO / Study-Group" required class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Target Channel ID <span class="text-rose-400">*</span></label>
+          <input type="text" id="modalServerChannelId" placeholder="e.g. 1234567890123456789" required class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple mono" />
+          <p class="text-xs text-discord-muted mt-1">Right-click target Discord channel with Developer Mode enabled and click Copy Channel ID.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Custom Webhook URL (Optional)</label>
+          <input type="url" id="modalServerWebhook" placeholder="Leave blank to use global webhook" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple mono" />
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="modalServerActive" checked class="rounded bg-discord-card border-discord-border text-discord-blurple focus:ring-0 cursor-pointer" />
+          <label for="modalServerActive" class="text-xs font-medium text-white cursor-pointer">Server profile active and monitoring</label>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-3 border-t border-discord-border">
+          <button type="button" onclick="closeServerModal()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-discord-card hover:bg-discord-border text-discord-muted hover:text-white transition cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold rounded-lg bg-discord-blurple hover:bg-indigo-600 text-white shadow transition cursor-pointer">Save Server</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD / EDIT SCHEDULE -->
+  <div id="scheduleModal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-discord-dark border border-discord-border rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <h3 id="scheduleModalTitle" class="text-base font-bold text-white">Add Attendance Schedule</h3>
+        <button onclick="closeScheduleModal()" class="text-discord-muted hover:text-white text-lg cursor-pointer">&times;</button>
+      </div>
+
+      <form id="scheduleForm" onsubmit="handleSaveSchedule(event)" class="space-y-4">
+        <input type="hidden" id="modalScheduleServerId" />
+        <input type="hidden" id="modalScheduleId" />
+
+        <!-- Frequency Type -->
+        <div>
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Frequency</label>
+          <select id="modalScheduleFrequency" onchange="handleFrequencyChange()" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple cursor-pointer">
+            <option value="everyday">Everyday (* * *)</option>
+            <option value="weekdays" selected>Weekdays Mon-Fri (* * 1-5)</option>
+            <option value="weekends">Weekends Sat-Sun (* * 0,6)</option>
+            <option value="specific_day">Specific Repeating Weekday (e.g. Every Monday)</option>
+            <option value="once">One-Time Calendar Date (Fires once and disables)</option>
+            <option value="custom">Custom Cron Expression</option>
+          </select>
+        </div>
+
+        <!-- Specific Weekday selector (shown if specific_day) -->
+        <div id="specificDayField" class="hidden">
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Select Weekday</label>
+          <select id="modalScheduleWeekday" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple cursor-pointer">
+            <option value="1">Monday</option>
+            <option value="2">Tuesday</option>
+            <option value="3">Wednesday</option>
+            <option value="4">Thursday</option>
+            <option value="5">Friday</option>
+            <option value="6">Saturday</option>
+            <option value="0">Sunday</option>
+          </select>
+        </div>
+
+        <!-- One-Time Date selector (shown if once) -->
+        <div id="oneTimeDateField" class="hidden">
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Select Target Calendar Date</label>
+          <input type="date" id="modalScheduleDate" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple cursor-pointer" />
+        </div>
+
+        <!-- Custom Cron selector (shown if custom) -->
+        <div id="customCronField" class="hidden">
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Cron Expression (Min Hour DOM Month DOW)</label>
+          <input type="text" id="modalScheduleCustomCron" placeholder="0 9 * * 1-5" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple mono" />
+        </div>
+
+        <!-- Time Picker (Hours, Minutes, AM/PM) -->
+        <div id="timeField" class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Time (Hour : Minute)</label>
+            <input type="time" id="modalScheduleTime" value="09:00" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple cursor-pointer" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Label</label>
+            <input type="text" id="modalScheduleLabel" placeholder="e.g. 09:00 AM (Weekdays)" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple" />
+          </div>
+        </div>
+
+        <!-- Attendance Mode: Message vs Reaction -->
+        <div>
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Attendance Dispatch Mode</label>
+          <div class="grid grid-cols-2 gap-3">
+            <button type="button" onclick="setMode('MESSAGE')" id="modeBtn-MESSAGE" class="px-4 py-2 rounded-lg text-xs font-bold border border-discord-blurple bg-discord-blurple text-white flex items-center justify-center space-x-2 cursor-pointer">
+              <i class="fa-solid fa-message"></i>
+              <span>Send Message</span>
+            </button>
+            <button type="button" onclick="setMode('REACTION')" id="modeBtn-REACTION" class="px-4 py-2 rounded-lg text-xs font-medium border border-discord-border bg-discord-card text-discord-muted hover:text-white flex items-center justify-center space-x-2 cursor-pointer">
+              <i class="fa-regular fa-face-smile"></i>
+              <span>Add Emoji Reaction</span>
+            </button>
+          </div>
+          <input type="hidden" id="modalScheduleType" value="MESSAGE" />
+        </div>
+
+        <!-- Message Mode Input -->
+        <div id="messageModeContainer">
+          <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Message Content (Multi-line supported)</label>
+          <textarea id="modalScheduleMessage" rows="3" placeholder="Present" class="w-full bg-discord-darker border border-discord-border rounded-lg p-3 text-sm text-white focus:outline-none focus:border-discord-blurple resize-none">Present</textarea>
+          <p class="text-xs text-discord-muted mt-0.5">Typing simulation will adjust naturally to character count before sending.</p>
+        </div>
+
+        <!-- Reaction Mode Inputs -->
+        <div id="reactionModeContainer" class="hidden space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Emoji to React With</label>
+            <input type="text" id="modalScheduleEmoji" value="👍" placeholder="👍 or ✅" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-discord-muted uppercase mb-1">Target Message ID (Optional)</label>
+            <input type="text" id="modalScheduleTargetMessageId" placeholder="Leave empty to react to most recent message" class="w-full bg-discord-darker border border-discord-border rounded-lg px-3.5 py-2 text-sm text-white focus:outline-none focus:border-discord-blurple mono" />
+          </div>
+        </div>
+
+        <!-- Anti-Detection Jitter -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-xs font-semibold text-discord-muted uppercase">Max Random Delay (Anti-Detection Jitter)</label>
+            <span id="jitterDisplay" class="text-xs font-bold text-amber-400">10 mins</span>
+          </div>
+          <input type="range" id="modalScheduleJitter" min="0" max="30" value="10" oninput="document.getElementById('jitterDisplay').innerText = this.value + ' mins'" class="w-full accent-discord-blurple cursor-pointer" />
+          <p class="text-xs text-discord-muted mt-0.5">Waits a random delay between 0 and this value to prevent bot detection flags.</p>
+        </div>
+
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="modalScheduleActive" checked class="rounded bg-discord-card border-discord-border text-discord-blurple focus:ring-0 cursor-pointer" />
+          <label for="modalScheduleActive" class="text-xs font-medium text-white cursor-pointer">Schedule is active</label>
+        </div>
+
+        <div class="flex items-center justify-end space-x-2 pt-3 border-t border-discord-border">
+          <button type="button" onclick="closeScheduleModal()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-discord-card hover:bg-discord-border text-discord-muted hover:text-white transition cursor-pointer">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-xs font-bold rounded-lg bg-discord-blurple hover:bg-indigo-600 text-white shadow transition cursor-pointer">Save Schedule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: IMPORT CONFIGURATION PREVIEW -->
+  <div id="importModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div class="bg-discord-dark border border-discord-border rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-discord-border pb-3">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-discord-blurple">
+            <i class="fa-solid fa-file-import text-sm"></i>
+          </div>
+          <h3 class="font-bold text-white text-base">Import Configuration</h3>
+        </div>
+        <button onclick="closeImportModal()" class="text-discord-muted hover:text-white text-base cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs text-discord-text">
+        <!-- File Stats Card -->
+        <div class="bg-discord-card/50 rounded-lg p-3.5 border border-discord-border/60 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-discord-muted">Selected File:</span>
+            <span id="importFileName" class="font-mono text-white font-semibold truncate max-w-xs">-</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 pt-1 border-t border-discord-border/40">
+            <div class="bg-discord-darker p-2 rounded border border-discord-border/40">
+              <span class="text-discord-muted block text-[11px]">Server Profiles</span>
+              <span id="importServerCount" class="text-sm font-bold text-emerald-400">0</span>
+            </div>
+            <div class="bg-discord-darker p-2 rounded border border-discord-border/40">
+              <span class="text-discord-muted block text-[11px]">Total Schedules</span>
+              <span id="importScheduleCount" class="text-sm font-bold text-discord-blurple">0</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import Mode Choice -->
+        <div class="space-y-2">
+          <label class="block font-semibold uppercase tracking-wider text-discord-muted text-[11px]">Import Method</label>
+          <div class="grid grid-cols-1 gap-2">
+            <label class="flex items-start space-x-3 p-2.5 rounded-lg border border-discord-border bg-discord-card/30 hover:border-discord-blurple/50 cursor-pointer transition">
+              <input type="radio" name="importMode" value="merge" checked class="mt-0.5 text-discord-blurple focus:ring-0 cursor-pointer" />
+              <div>
+                <span class="font-semibold text-white block">Merge with existing profiles</span>
+                <span class="text-discord-muted text-[11px]">Keeps your current servers and updates or appends imported servers.</span>
+              </div>
+            </label>
+            <label class="flex items-start space-x-3 p-2.5 rounded-lg border border-discord-border bg-discord-card/30 hover:border-discord-blurple/50 cursor-pointer transition">
+              <input type="radio" name="importMode" value="replace" class="mt-0.5 text-discord-blurple focus:ring-0 cursor-pointer" />
+              <div>
+                <span class="font-semibold text-rose-300 block">Replace all existing profiles</span>
+                <span class="text-discord-muted text-[11px]">Replaces your current server profiles list entirely with the imported configuration.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Webhook notice if present -->
+        <div id="importWebhookNotice" class="hidden p-2.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-200 text-[11px] flex items-center space-x-2">
+          <i class="fa-solid fa-circle-info text-discord-blurple"></i>
+          <span>This file also includes a Discord notification webhook URL, which will be imported.</span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-3 border-t border-discord-border">
+        <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-discord-card hover:bg-discord-border text-discord-muted hover:text-white transition cursor-pointer">Cancel</button>
+        <button type="button" id="confirmImportBtn" onclick="confirmImportConfig()" class="px-4 py-2 text-xs font-bold rounded-lg bg-discord-blurple hover:bg-indigo-600 text-white shadow transition cursor-pointer">Confirm & Apply Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KEYBOARD SHORTCUTS REFERENCE MODAL -->
+  <div id="shortcutsModal" class="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 hidden backdrop-blur-sm">
+    <div class="bg-discord-dark border border-discord-border rounded-xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-discord-border pb-3">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-discord-blurple/20 text-discord-blurple flex items-center justify-center">
+            <i class="fa-regular fa-keyboard"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-white text-base">Global Keyboard Shortcuts</h3>
+            <p class="text-xs text-discord-muted">Fast power-user workflows and instant navigation.</p>
+          </div>
+        </div>
+        <button onclick="closeShortcutsModal()" class="text-discord-muted hover:text-white text-lg p-1 cursor-pointer">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
+        <!-- Actions Group -->
+        <div class="space-y-2">
+          <h4 class="text-[11px] font-bold text-discord-muted uppercase tracking-wider">Quick Actions</h4>
+          <div class="space-y-1.5 text-xs">
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/50 border border-discord-border/50">
+              <span class="text-white font-medium">Save Settings / Submit Active Modal</span>
+              <div class="flex items-center space-x-1">
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">Ctrl</kbd>
+                <span class="text-discord-muted text-xs">+</span>
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">S</kbd>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/50 border border-discord-border/50">
+              <span class="text-white font-medium">Add New Server Profile</span>
+              <div class="flex items-center space-x-1">
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">Ctrl</kbd>
+                <span class="text-discord-muted text-xs">+</span>
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">N</kbd>
+                <span class="text-discord-muted text-[10px] ml-1">(or Alt+N)</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/50 border border-discord-border/50">
+              <span class="text-white font-medium">Start / Stop Daemon Background Worker</span>
+              <div class="flex items-center space-x-1">
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">Ctrl</kbd>
+                <span class="text-discord-muted text-xs">+</span>
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">B</kbd>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/50 border border-discord-border/50">
+              <span class="text-white font-medium">Focus Server Search Input</span>
+              <div class="flex items-center space-x-1">
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">Ctrl</kbd>
+                <span class="text-discord-muted text-xs">+</span>
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">F</kbd>
+                <span class="text-discord-muted text-[10px] ml-1">or <kbd class="mono text-[11px] px-1.5 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">/</kbd></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation Group -->
+        <div class="space-y-2">
+          <h4 class="text-[11px] font-bold text-discord-muted uppercase tracking-wider">Tab Navigation</h4>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-xs">
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Server Profiles</span>
+              <span class="mono text-[11px] px-1.5 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300">Ctrl + 1</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Credentials</span>
+              <span class="mono text-[11px] px-1.5 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300">Ctrl + 2</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Live Console</span>
+              <span class="mono text-[11px] px-1.5 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300">Ctrl + 3</span>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Setup Guide</span>
+              <span class="mono text-[11px] px-1.5 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300">Ctrl + 4</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dialog Controls -->
+        <div class="space-y-2">
+          <h4 class="text-[11px] font-bold text-discord-muted uppercase tracking-wider">Interface Controls</h4>
+          <div class="space-y-1.5 text-xs">
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Close Active Modal Dialog</span>
+              <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-discord-muted">Esc</kbd>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Toggle Dark / Light Theme</span>
+              <div class="flex items-center space-x-1">
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">Alt</kbd>
+                <span class="text-discord-muted text-xs">+</span>
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">T</kbd>
+              </div>
+            </div>
+            <div class="flex items-center justify-between p-2 rounded-lg bg-discord-card/40 border border-discord-border/40">
+              <span class="text-discord-text">Show Shortcuts Reference</span>
+              <div class="flex items-center space-x-1">
+                <kbd class="mono text-[11px] px-2 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">?</kbd>
+                <span class="text-discord-muted text-xs">or</span>
+                <kbd class="mono text-[11px] px-1.5 py-0.5 rounded bg-discord-dark border border-discord-border text-indigo-300 font-semibold shadow-xs">Ctrl+/</kbd>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-discord-border flex justify-end">
+        <button onclick="closeShortcutsModal()" class="px-4 py-2 text-xs font-semibold rounded-lg bg-discord-blurple hover:bg-indigo-600 text-white transition cursor-pointer">
+          Got It
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="mt-auto border-t border-discord-border/60 bg-discord-dark py-3 px-4 sm:px-6">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between text-xs text-discord-muted gap-2">
+      <p>⚡ AttendanceBot v2.1.0 • Designed for reliable daily Discord attendance.</p>
+      <div class="flex items-center space-x-4">
+        <span>Port 3000 Active</span>
+        <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span>Node.js Runtime</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- React 18, ReactDOM 18, PropTypes and Recharts UMD bundles for 30-day Line Chart -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+
+  <script src="/app.js"></script>
+</body>
+</html>

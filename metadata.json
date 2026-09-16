@@ -1,0 +1,6 @@
+{
+  "name": "AttendanceBot",
+  "description": "Multi-server Discord daily attendance background daemon and web management dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

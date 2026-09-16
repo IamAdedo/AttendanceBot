@@ -12,6 +12,8 @@
  */
 
 const https = require('https');
+const logger = require('../logger');
+const attendanceHistory = require('../attendanceHistory');
 
 /**
  * Utility pause helper
@@ -84,6 +86,7 @@ async function executeAttendanceTask(client, server, schedule, globalWebhookUrl 
 
     try {
         console.log(`\n[Worker] ⏰ Schedule triggered for server: "${server.name}" (${schedule.label})`);
+        logger.info(`[Worker] ⏰ Schedule triggered for server: "${server.name}" (${schedule.label})`);
 
         // 1. Calculate and apply anti-detection jitter
         const maxJitter = schedule.maxJitterMinutes ?? 10;
@@ -92,6 +95,7 @@ async function executeAttendanceTask(client, server, schedule, globalWebhookUrl 
         if (jitterMs > 0) {
             const jitterSec = Math.round(jitterMs / 1000);
             console.log(`[Worker] 🎲 Applying anti-detection jitter: waiting ${jitterSec}s before dispatching...`);
+            logger.info(`[Worker] 🎲 Applying anti-detection jitter: waiting ${jitterSec}s before dispatching...`);
             await sleep(jitterMs);
         }
 
@@ -130,6 +134,18 @@ async function executeAttendanceTask(client, server, schedule, globalWebhookUrl 
             await targetMessage.react(emoji);
 
             console.log(`[Worker] ✅ Reacted with "${emoji}" to message ID: ${targetMessage.id}`);
+            logger.success(`[Worker] Reacted with "${emoji}" to message ID: ${targetMessage.id}`);
+
+            attendanceHistory.recordExecution({
+                serverId: server.id,
+                serverName: server.name,
+                channelId: server.channelId,
+                scheduleId: schedule.id,
+                scheduleLabel: schedule.label,
+                type: 'REACTION',
+                status: 'SUCCESS',
+                details: `Reacted with "${emoji}" to message ID: ${targetMessage.id}`
+            });
 
             // Dispatch Success Webhook
             sendWebhookNotification(targetWebhook, {
@@ -157,11 +173,24 @@ async function executeAttendanceTask(client, server, schedule, globalWebhookUrl 
                 const typingMs = Math.min(Math.max(charCount * 100, 1500), 7000);
 
                 console.log(`[Worker] ⌨️ Simulating human typing for ${Math.round(typingMs)}ms...`);
+                logger.info(`[Worker] ⌨️ Simulating human typing for ${Math.round(typingMs)}ms...`);
                 await sleep(typingMs);
             }
 
             const sentMsg = await channel.send(messageText);
             console.log(`[Worker] ✅ Message posted successfully! (ID: ${sentMsg.id})`);
+            logger.success(`[Worker] Message posted successfully to #${channel.name || server.channelId}! (ID: ${sentMsg.id})`);
+
+            attendanceHistory.recordExecution({
+                serverId: server.id,
+                serverName: server.name,
+                channelId: server.channelId,
+                scheduleId: schedule.id,
+                scheduleLabel: schedule.label,
+                type: 'MESSAGE',
+                status: 'SUCCESS',
+                details: `Message posted successfully: "${messageText}" (ID: ${sentMsg.id})`
+            });
 
             // Dispatch Success Webhook
             sendWebhookNotification(targetWebhook, {
@@ -180,6 +209,19 @@ async function executeAttendanceTask(client, server, schedule, globalWebhookUrl 
     } catch (err) {
         const totalElapsedSec = Math.round((Date.now() - startTime) / 1000);
         console.error(`[Worker] ❌ Error executing schedule "${schedule.label}" on server "${server.name}":`, err.message);
+        logger.error(`[Worker] Error executing schedule "${schedule.label}" on server "${server.name}": ${err.message}`);
+
+        attendanceHistory.recordExecution({
+            serverId: server.id,
+            serverName: server.name,
+            channelId: server.channelId,
+            scheduleId: schedule.id,
+            scheduleLabel: schedule.label,
+            type: (schedule.attendanceType || 'MESSAGE').toUpperCase(),
+            status: 'FAILED',
+            error: err.message,
+            details: `Execution failed: ${err.message}`
+        });
 
         // Dispatch Failure Webhook
         sendWebhookNotification(targetWebhook, {
