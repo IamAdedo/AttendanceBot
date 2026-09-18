@@ -971,8 +971,35 @@ function closeAllOpenModals() {
     closeScheduleModal();
     closeImportModal();
     closeShortcutsModal();
+    closeStatusLegendModal();
     const testModal = document.getElementById('testWebhookModal');
     if (testModal) testModal.classList.add('hidden');
+}
+
+function openStatusLegendModal() {
+    const modal = document.getElementById('statusLegendModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+}
+
+function closeStatusLegendModal() {
+    const modal = document.getElementById('statusLegendModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+}
+
+function toggleStatusLegendModal() {
+    const modal = document.getElementById('statusLegendModal');
+    if (!modal) return;
+    if (modal.classList.contains('hidden')) {
+        openStatusLegendModal();
+    } else {
+        closeStatusLegendModal();
+    }
 }
 
 function openShortcutsModal() {
