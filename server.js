@@ -6,6 +6,8 @@ const logger = require('./src/logger');
 const attendanceHistory = require('./src/attendanceHistory');
 const CliEngine = require('./src/cliEngine');
 
+const { validateConfigSchema } = require('./src/schemaValidator');
+
 const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0';
@@ -122,7 +124,7 @@ app.get('/api/config/export', (req, res) => {
     const config = daemonManager.getConfig();
     const exportData = {
         app: 'AttendanceBot',
-        version: '3.0.0',
+        version: '3.3.0',
         exportedAt: new Date().toISOString(),
         globalWebhookUrl: config.globalWebhookUrl || '',
         servers: config.servers || [],
@@ -133,40 +135,37 @@ app.get('/api/config/export', (req, res) => {
     res.json(exportData);
 });
 
-// Import server profiles and schedules configuration
-app.post('/api/config/import', (req, res) => {
-    const { servers, mode = 'replace', globalWebhookUrl } = req.body;
+// Pre-validate configuration schema before committing import
+app.post('/api/config/validate', (req, res) => {
+    const validation = validateConfigSchema(req.body);
+    res.json({
+        isValid: validation.isValid,
+        errors: validation.errors,
+        warnings: validation.warnings,
+        stats: validation.stats
+    });
+});
 
-    if (!servers || !Array.isArray(servers)) {
-        return res.status(400).json({ error: 'Invalid configuration format: "servers" array is required.' });
+// Import server profiles and schedules configuration with strict schema validation
+app.post('/api/config/import', (req, res) => {
+    const { mode = 'replace', globalWebhookUrl } = req.body;
+
+    // Run deep schema validation
+    const validation = validateConfigSchema(req.body);
+    if (!validation.isValid) {
+        logger.warn(`Config import rejected: ${validation.errors.length} schema validation error(s).`);
+        return res.status(400).json({
+            error: 'Configuration failed schema validation.',
+            errors: validation.errors,
+            warnings: validation.warnings,
+            stats: validation.stats
+        });
     }
 
+    const sanitizedServers = validation.sanitized.servers;
     const config = daemonManager.getConfig();
 
-    // Validate and sanitize server entries
-    const sanitizedServers = servers.map((s, idx) => ({
-        id: s.id ? String(s.id) : `${Date.now()}_${idx}`,
-        name: s.name ? String(s.name).trim() : `Imported Server ${idx + 1}`,
-        channelId: s.channelId ? String(s.channelId).trim() : '',
-        webhookUrl: s.webhookUrl ? String(s.webhookUrl).trim() : '',
-        active: s.active !== undefined ? Boolean(s.active) : true,
-        schedules: Array.isArray(s.schedules) ? s.schedules.map((sc, sIdx) => ({
-            id: sc.id ? String(sc.id) : `${Date.now()}_sched_${sIdx}`,
-            label: sc.label ? String(sc.label).trim() : 'Scheduled Attendance',
-            cron: sc.cron ? String(sc.cron).trim() : '0 9 * * 1-5',
-            attendanceType: (sc.attendanceType || 'MESSAGE').toUpperCase(),
-            message: sc.message !== undefined ? sc.message : 'Present',
-            emoji: sc.emoji || '👍',
-            targetMessageId: sc.targetMessageId ? String(sc.targetMessageId).trim() : '',
-            maxJitterMinutes: Number(sc.maxJitterMinutes) >= 0 ? Number(sc.maxJitterMinutes) : 10,
-            active: sc.active !== undefined ? Boolean(sc.active) : true,
-            type: sc.type === 'ONCE' ? 'ONCE' : undefined,
-            runDate: sc.runDate || undefined,
-        })) : [],
-    }));
-
     if (mode === 'merge') {
-        const existingIds = new Set(config.servers.map((s) => String(s.id)));
         sanitizedServers.forEach((incoming) => {
             const existingIdx = config.servers.findIndex((s) => String(s.id) === String(incoming.id));
             if (existingIdx >= 0) {
@@ -180,21 +179,28 @@ app.post('/api/config/import', (req, res) => {
         config.servers = sanitizedServers;
     }
 
-    if (globalWebhookUrl && !config.globalWebhookUrl) {
-        config.globalWebhookUrl = globalWebhookUrl.trim();
+    const importedWebhook = globalWebhookUrl || validation.sanitized.globalWebhookUrl;
+    if (importedWebhook && !config.globalWebhookUrl) {
+        config.globalWebhookUrl = importedWebhook.trim();
     }
 
     const saved = daemonManager.saveConfig(config);
     if (!saved) {
-        return res.status(500).json({ error: 'Failed to persist imported configuration' });
+        return res.status(500).json({ error: 'Failed to persist imported configuration to disk.' });
     }
 
     if (daemonManager.status === 'RUNNING') {
         daemonManager.initializeSchedules(config);
     }
 
-    logger.success(`Successfully imported ${sanitizedServers.length} server profile(s) (${mode} mode).`);
-    res.json({ success: true, count: sanitizedServers.length, servers: config.servers });
+    logger.success(`Successfully imported ${sanitizedServers.length} server profile(s) (${mode} mode) with schema validation passed.`);
+    res.json({
+        success: true,
+        count: sanitizedServers.length,
+        warnings: validation.warnings,
+        stats: validation.stats,
+        servers: config.servers
+    });
 });
 
 // Start Daemon
@@ -217,10 +223,27 @@ app.post('/api/servers', (req, res) => {
     }
 
     const config = daemonManager.getConfig();
+    const cleanChan = channelId.trim();
+    const cleanName = name.trim();
+
+    // Check for duplicate server profile by channel ID or server name
+    const existing = (config.servers || []).find(
+        (s) => (s.channelId && s.channelId.trim() === cleanChan) ||
+               (s.name && s.name.trim().toLowerCase() === cleanName.toLowerCase())
+    );
+
+    if (existing) {
+        return res.status(409).json({
+            error: `Server profile already exists: "${existing.name}" (Channel: ${existing.channelId})`,
+            duplicate: true,
+            existingServer: existing,
+        });
+    }
+
     const newServer = {
         id: Date.now().toString(),
-        name: name.trim(),
-        channelId: channelId.trim(),
+        name: cleanName,
+        channelId: cleanChan,
         webhookUrl: (webhookUrl || '').trim(),
         active: active !== undefined ? Boolean(active) : true,
         schedules: [],

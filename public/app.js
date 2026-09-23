@@ -705,7 +705,7 @@ function downloadConfigBackupJson() {
 
     const exportData = {
         app: 'AttendanceBot',
-        version: '3.0.0',
+        version: '3.2.0',
         exportedAt: new Date().toISOString(),
         serverCount: (currentConfig.servers || []).length,
         scheduleCount: totalSchedules,
@@ -734,7 +734,7 @@ function downloadConfigBackupJson() {
 async function restoreFromLocalBackup() {
     const raw = localStorage.getItem(BACKUP_STORAGE_KEY);
     if (!raw) {
-        alert('No local auto-backup snapshot found in browser storage.');
+        showNotificationToast('No local auto-backup snapshot found in browser storage.', 'warning');
         return;
     }
 
@@ -742,14 +742,27 @@ async function restoreFromLocalBackup() {
     try {
         backup = JSON.parse(raw);
     } catch (e) {
-        alert('Local backup data is corrupted.');
+        showNotificationToast('Local backup data is corrupted.', 'danger');
         return;
     }
 
     const dateStr = backup.timestamp ? new Date(backup.timestamp).toLocaleString() : 'Unknown date';
     const serverCount = backup.serverCount || (backup.config && backup.config.servers ? backup.config.servers.length : 0);
 
-    const confirmed = confirm(`Restore configuration from local auto-backup snapshot?\n\n• Snapshot Time: ${dateStr}\n• Included Servers: ${serverCount}\n\nThis will restore your servers and schedules into the current session.`);
+    const confirmed = await showConfirmDialog({
+        title: 'Restore Configuration Snapshot',
+        message: 'Restore your server profiles and schedules from the local browser auto-backup?',
+        details: [
+            { label: 'Snapshot Time', value: dateStr },
+            { label: 'Included Servers', value: `${serverCount} server profile(s)` },
+            { label: 'Action', value: 'Overwrites current session configuration' }
+        ],
+        icon: 'fa-solid fa-cloud-arrow-down',
+        iconColor: 'indigo',
+        confirmText: 'Restore Backup',
+        confirmClass: 'bg-discord-blurple hover:bg-indigo-600 text-white',
+        cancelText: 'Cancel'
+    });
     if (!confirmed) return;
 
     try {
@@ -1401,7 +1414,27 @@ async function bulkDeleteSelectedServers() {
         return;
     }
     const count = selectedServerIds.size;
-    const confirmed = confirm(`Are you sure you want to permanently delete the ${count} selected server profile(s)?\n\nAll associated attendance schedules will also be removed. This cannot be undone.`);
+    const names = [];
+    selectedServerIds.forEach(id => {
+        const s = (currentConfig.servers || []).find(srv => String(srv.id) === String(id));
+        if (s) names.push(s.name);
+    });
+
+    const confirmed = await showConfirmDialog({
+        title: `Delete ${count} Server Profile${count === 1 ? '' : 's'}`,
+        message: `Are you sure you want to permanently delete the ${count} selected server profile${count === 1 ? '' : 's'} and all associated routines?`,
+        details: [
+            { label: 'Selected Profiles', value: `${count} server profile(s)` },
+            { label: 'Servers', value: names.slice(0, 3).join(', ') + (names.length > 3 ? ` + ${names.length - 3} more` : '') },
+            { label: 'Action', value: 'Permanent removal & daemon watcher teardown' }
+        ],
+        icon: 'fa-solid fa-trash-can',
+        iconColor: 'rose',
+        confirmText: `Delete ${count} Server${count === 1 ? '' : 's'}`,
+        confirmClass: 'bg-rose-600 hover:bg-rose-500 text-white',
+        cancelText: 'Cancel'
+    });
+
     if (!confirmed) return;
 
     const serverIds = Array.from(selectedServerIds);
@@ -1418,10 +1451,10 @@ async function bulkDeleteSelectedServers() {
             await fetchConfig();
             await fetchStatus();
         } else {
-            alert(`Bulk delete failed: ${data.error || 'Unknown error'}`);
+            showNotificationToast(`Bulk delete failed: ${data.error || 'Unknown error'}`, 'danger');
         }
     } catch (err) {
-        alert(`Error executing bulk delete: ${err.message}`);
+        showNotificationToast(`Error executing bulk delete: ${err.message}`, 'danger');
     }
 }
 
@@ -1468,7 +1501,7 @@ function exportConfigJSON() {
 
     const exportData = {
         app: 'AttendanceBot',
-        version: '3.0.0',
+        version: '3.2.0',
         exportedAt: new Date().toISOString(),
         globalWebhookUrl: currentConfig.globalWebhookUrl || '',
         servers: servers
@@ -1495,66 +1528,179 @@ function triggerImportConfig() {
     }
 }
 
+function renderImportValidationErrors(errors) {
+    const errContainer = document.getElementById('importValidationErrors');
+    const errList = document.getElementById('importValidationErrorsList');
+    const errCount = document.getElementById('importValidationErrorsCount');
+    if (errContainer && errList) {
+        errList.innerHTML = '';
+        errors.forEach(err => {
+            const li = document.createElement('li');
+            li.textContent = err;
+            errList.appendChild(li);
+        });
+        if (errCount) {
+            errCount.innerText = `Invalid Schema Structure (${errors.length} error${errors.length > 1 ? 's' : ''})`;
+        }
+        errContainer.classList.remove('hidden');
+    }
+}
+
+function renderImportModalState(fileName, validation, rawData) {
+    const fileNameEl = document.getElementById('importFileName');
+    const serverCountEl = document.getElementById('importServerCount');
+    const schedCountEl = document.getElementById('importScheduleCount');
+    const statusBanner = document.getElementById('importValidationStatus');
+    const statusIcon = document.getElementById('importValidationIcon');
+    const statusTitle = document.getElementById('importValidationTitle');
+    const statusDesc = document.getElementById('importValidationDesc');
+    const errContainer = document.getElementById('importValidationErrors');
+    const errList = document.getElementById('importValidationErrorsList');
+    const errCount = document.getElementById('importValidationErrorsCount');
+    const warnContainer = document.getElementById('importValidationWarnings');
+    const warnList = document.getElementById('importValidationWarningsList');
+    const confirmBtn = document.getElementById('confirmImportBtn');
+    const modeContainer = document.getElementById('importModeContainer');
+    const webhookNotice = document.getElementById('importWebhookNotice');
+
+    if (fileNameEl) fileNameEl.innerText = fileName || '-';
+
+    const srvCount = validation.stats ? validation.stats.serverCount : 0;
+    const scCount = validation.stats ? validation.stats.scheduleCount : 0;
+    if (serverCountEl) serverCountEl.innerText = srvCount;
+    if (schedCountEl) schedCountEl.innerText = scCount;
+
+    if (validation.isValid) {
+        // Valid state
+        if (statusBanner) {
+            statusBanner.className = 'p-3 rounded-lg border flex items-start space-x-2.5 bg-emerald-500/10 border-emerald-500/20 text-emerald-300';
+        }
+        if (statusIcon) {
+            statusIcon.className = 'fa-solid fa-circle-check text-emerald-400 text-sm mt-0.5';
+        }
+        if (statusTitle) {
+            statusTitle.className = 'font-bold block text-xs text-emerald-300';
+            statusTitle.innerText = 'Schema Verification Passed';
+        }
+        if (statusDesc) {
+            statusDesc.innerText = `All ${srvCount} server profile(s) and ${scCount} schedule(s) conform to AttendanceBot v3 specification.`;
+        }
+
+        if (errContainer) errContainer.classList.add('hidden');
+
+        // Warnings
+        if (warnContainer && warnList) {
+            if (validation.warnings && validation.warnings.length > 0) {
+                warnList.innerHTML = '';
+                validation.warnings.forEach(w => {
+                    const li = document.createElement('li');
+                    li.textContent = w;
+                    warnList.appendChild(li);
+                });
+                warnContainer.classList.remove('hidden');
+            } else {
+                warnContainer.classList.add('hidden');
+            }
+        }
+
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerText = 'Confirm & Apply Import';
+            confirmBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+        if (modeContainer) modeContainer.classList.remove('opacity-50', 'pointer-events-none');
+    } else {
+        // Invalid state
+        if (statusBanner) {
+            statusBanner.className = 'p-3 rounded-lg border flex items-start space-x-2.5 bg-rose-500/10 border-rose-500/25 text-rose-300';
+        }
+        if (statusIcon) {
+            statusIcon.className = 'fa-solid fa-circle-xmark text-rose-400 text-sm mt-0.5';
+        }
+        if (statusTitle) {
+            statusTitle.className = 'font-bold block text-xs text-rose-300';
+            statusTitle.innerText = 'Schema Verification Failed';
+        }
+        if (statusDesc) {
+            statusDesc.innerText = 'The uploaded file does not conform to the required JSON schema structure.';
+        }
+
+        renderImportValidationErrors(validation.errors || ['Invalid structure detected.']);
+
+        if (warnContainer) warnContainer.classList.add('hidden');
+
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerText = 'Resolve Schema Errors to Import';
+            confirmBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+        if (modeContainer) modeContainer.classList.add('opacity-50', 'pointer-events-none');
+    }
+
+    // Check webhook notice
+    if (webhookNotice) {
+        const hasWebhook = (rawData && rawData.globalWebhookUrl) || (validation.sanitized && validation.sanitized.globalWebhookUrl);
+        if (hasWebhook) {
+            webhookNotice.classList.remove('hidden');
+        } else {
+            webhookNotice.classList.add('hidden');
+        }
+    }
+}
+
 function handleConfigFileSelected(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
+        let parsed;
         try {
-            const parsed = JSON.parse(e.target.result);
-            let importedServers = [];
-            let globalWebhook = '';
+            parsed = JSON.parse(e.target.result);
+        } catch (err) {
+            showNotificationToast(`Could not parse JSON configuration file: ${err.message}`, 'error');
+            return;
+        }
 
-            if (Array.isArray(parsed)) {
-                importedServers = parsed;
-            } else if (parsed && typeof parsed === 'object') {
-                if (Array.isArray(parsed.servers)) {
-                    importedServers = parsed.servers;
-                } else if (parsed.name && parsed.channelId) {
-                    importedServers = [parsed];
-                }
-                if (parsed.globalWebhookUrl) {
-                    globalWebhook = parsed.globalWebhookUrl;
-                }
-            }
-
-            if (!importedServers || importedServers.length === 0) {
-                alert('Invalid configuration file: No valid server profiles found in the selected JSON.');
-                return;
-            }
-
-            let totalSchedules = 0;
-            importedServers.forEach(s => {
-                if (Array.isArray(s.schedules)) totalSchedules += s.schedules.length;
+        let validationResult = null;
+        try {
+            const res = await fetch('/api/config/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(parsed)
             });
-
-            pendingImportData = {
-                fileName: file.name,
-                servers: importedServers,
-                globalWebhookUrl: globalWebhook,
-            };
-
-            document.getElementById('importFileName').innerText = file.name;
-            document.getElementById('importServerCount').innerText = importedServers.length;
-            document.getElementById('importScheduleCount').innerText = totalSchedules;
-
-            const webhookNotice = document.getElementById('importWebhookNotice');
-            if (webhookNotice) {
-                if (globalWebhook) {
-                    webhookNotice.classList.remove('hidden');
-                } else {
-                    webhookNotice.classList.add('hidden');
-                }
-            }
-
-            const modal = document.getElementById('importModal');
-            if (modal) {
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
+            if (res.ok) {
+                validationResult = await res.json();
+            } else {
+                const errData = await res.json();
+                validationResult = {
+                    isValid: false,
+                    errors: errData.errors || [errData.error || 'Server rejected configuration'],
+                    warnings: errData.warnings || [],
+                    stats: { serverCount: 0, scheduleCount: 0 }
+                };
             }
         } catch (err) {
-            alert(`Could not parse JSON configuration file: ${err.message}`);
+            validationResult = {
+                isValid: false,
+                errors: [`Validation service unavailable: ${err.message}`],
+                warnings: [],
+                stats: { serverCount: 0, scheduleCount: 0 }
+            };
+        }
+
+        pendingImportData = {
+            fileName: file.name,
+            rawPayload: parsed,
+            validation: validationResult
+        };
+
+        renderImportModalState(file.name, validationResult, parsed);
+
+        const modal = document.getElementById('importModal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
         }
     };
     reader.readAsText(file);
@@ -1570,7 +1716,10 @@ function closeImportModal() {
 }
 
 async function confirmImportConfig() {
-    if (!pendingImportData) return;
+    if (!pendingImportData || !pendingImportData.validation || !pendingImportData.validation.isValid) {
+        showNotificationToast('Cannot import: JSON schema validation errors must be resolved.', 'warning');
+        return;
+    }
 
     const modeInput = document.querySelector('input[name="importMode"]:checked');
     const mode = modeInput ? modeInput.value : 'merge';
@@ -1578,7 +1727,7 @@ async function confirmImportConfig() {
     const confirmBtn = document.getElementById('confirmImportBtn');
     if (confirmBtn) {
         confirmBtn.disabled = true;
-        confirmBtn.innerText = 'Importing...';
+        confirmBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Importing...';
     }
 
     try {
@@ -1586,9 +1735,8 @@ async function confirmImportConfig() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                servers: pendingImportData.servers,
+                ...pendingImportData.rawPayload,
                 mode: mode,
-                globalWebhookUrl: pendingImportData.globalWebhookUrl,
             })
         });
 
@@ -1597,12 +1745,15 @@ async function confirmImportConfig() {
             closeImportModal();
             await fetchConfig();
             await fetchStatus();
-            alert(`✅ Successfully imported ${data.count} server profile(s) (${mode === 'merge' ? 'Merged with existing' : 'Replaced existing'}).`);
+            showNotificationToast(`Successfully imported ${data.count} server profile(s) (${mode === 'merge' ? 'Merged' : 'Replaced'}).`, 'success');
         } else {
-            alert(`❌ Import failed: ${data.error || 'Unknown error'}`);
+            showNotificationToast(`Import failed: ${data.error || 'Schema validation rejected'}`, 'error');
+            if (data.errors && data.errors.length > 0) {
+                renderImportValidationErrors(data.errors);
+            }
         }
     } catch (err) {
-        alert(`Error importing configuration: ${err.message}`);
+        showNotificationToast(`Error importing configuration: ${err.message}`, 'error');
     } finally {
         if (confirmBtn) {
             confirmBtn.disabled = false;
@@ -1939,20 +2090,25 @@ function renderServers() {
                         onchange="toggleServerSelection('${server.id}', this.checked)"
                         title="Select this server for bulk actions"
                     />
-                    <div class="w-10 h-10 rounded-xl ${cardIconBox} border flex items-center justify-center font-bold text-base shrink-0">
+                    <div class="relative w-10 h-10 rounded-xl ${cardIconBox} border flex items-center justify-center font-bold text-base shrink-0">
                         <i class="fa-solid fa-hashtag"></i>
+                        ${hasConflict ? `
+                            <span class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[10px] font-black shadow-md border-2 border-discord-dark animate-pulse" title="Rate-Limiting Warning: Multiple schedules trigger within the same 5-minute window in this channel">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                            </span>
+                        ` : ''}
                     </div>
                     <div>
                         <div class="flex flex-wrap items-center gap-2">
                             <h3 class="font-bold text-white text-base">${escapeHtml(server.name)}</h3>
-                            ${healthPill}
-                            ${uptimeBadge}
                             ${hasConflict ? `
-                                <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-flex items-center gap-1.5" title="Two or more schedules trigger within 5 minutes of each other in channel ${escapeHtml(server.channelId)}">
-                                    <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
-                                    <span>Timing Conflict (&le;5m)</span>
+                                <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 inline-flex items-center gap-1.5 shadow-xs cursor-pointer hover:bg-amber-500/30 transition group/ratewarn" title="Rate-Limit Warning: Multiple schedules trigger within 5 minutes of each other in channel ${escapeHtml(server.channelId)}. Potential rate-limiting risk!">
+                                    <i class="fa-solid fa-triangle-exclamation text-amber-400 text-xs animate-bounce"></i>
+                                    <span>Rate-Limit Warning (&le;5m overlap)</span>
                                 </span>
                             ` : ''}
+                            ${healthPill}
+                            ${uptimeBadge}
                         </div>
                         <!-- Server Profile List Row Metadata with Elapsed Check-in Clock -->
                         <div class="flex flex-wrap items-center gap-2.5 text-xs text-discord-muted mt-1 mono">
@@ -1961,6 +2117,12 @@ function renderServers() {
                                 <i class="fa-regular fa-clock ${lastSuccessTimestamp ? 'text-emerald-400' : 'text-discord-muted'} text-[11px]"></i>
                                 <span>Last success: <strong class="${lastSuccessTimestamp ? 'text-emerald-400' : 'text-discord-muted'}">${lastSuccessElapsed || 'Never'}</strong></span>
                             </span>
+                            ${hasConflict ? `
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-amber-300 font-sans text-[11px] font-semibold" title="Rate-limiting risk: ${conflicts.length} overlapping schedule pairs found within 5 minutes">
+                                    <i class="fa-solid fa-triangle-exclamation text-amber-400 text-[10px] animate-pulse"></i>
+                                    <span>${conflicts.length} Timing Overlap${conflicts.length === 1 ? '' : 's'}</span>
+                                </span>
+                            ` : ''}
                             ${serverHealth && serverHealth.lastRunAt ? `
                                 <span class="${health === 'FAILED' ? 'text-rose-300' : 'text-emerald-400/90'}">
                                     • Last Run: ${new Date(serverHealth.lastRunAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${escapeHtml(serverHealth.lastRunStatus || 'OK')})
@@ -2015,11 +2177,14 @@ function renderServers() {
                         </div>
                         <div class="text-xs space-y-2 w-full">
                             <div class="flex flex-wrap items-center justify-between gap-1">
-                                <span class="font-bold text-amber-300 text-sm">Schedule Trigger Conflict Detected (&le; 5-Minute Window)</span>
+                                <span class="font-bold text-amber-300 text-sm flex items-center gap-1.5">
+                                    <i class="fa-solid fa-shield-halved text-amber-400"></i>
+                                    <span>Rate-Limiting Warning (&le; 5-Minute Trigger Window)</span>
+                                </span>
                                 <span class="text-[11px] px-2 py-0.5 rounded bg-amber-500/20 font-mono text-amber-200 border border-amber-500/30">Channel: ${escapeHtml(server.channelId)}</span>
                             </div>
                             <p class="text-amber-200/90 leading-relaxed">
-                                Two or more attendance schedules are set to trigger within the same <strong>5-minute window</strong> for this channel. Rapid automated posting or reacting in the same channel can lead to Discord rate limits, failed attendances, or anti-bot flags:
+                                Two or more attendance schedules are set to trigger within the same <strong>5-minute window</strong> for this channel. Rapid consecutive messages or reactions in the same channel can trigger <strong>Discord rate limits</strong>, cause request drops, or flag your account:
                             </p>
                             <div class="space-y-1.5 pt-0.5">
                                 ${conflicts.map(c => `
@@ -2034,8 +2199,9 @@ function renderServers() {
                                     </div>
                                 `).join('')}
                             </div>
-                            <p class="text-[11px] text-amber-400/80 pt-0.5">
-                                💡 <strong>Tip:</strong> Re-schedule conflicting routines at least 10–15 minutes apart, or increase anti-detection jitter to stagger executions.
+                            <p class="text-[11px] text-amber-400/90 pt-0.5 flex items-center gap-1.5">
+                                <i class="fa-solid fa-lightbulb text-amber-400"></i>
+                                <span><strong>Prevention:</strong> Space routines at least 10–15 minutes apart, or increase anti-detection jitter to stagger automated dispatches safely.</span>
                             </p>
                         </div>
                     </div>
@@ -2104,7 +2270,7 @@ function renderServers() {
                                             <div class="flex items-center flex-wrap gap-1.5">
                                                 <span>${escapeHtml(sched.label)}</span>
                                                 ${sched.type === 'ONCE' ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">ONE-TIME</span>' : ''}
-                                                ${isConflicting ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold inline-flex items-center gap-1" title="Triggers within 5 minutes of another schedule in this channel"><i class="fa-solid fa-triangle-exclamation text-[9px]"></i> &le;5m Window</span>' : ''}
+                                                ${isConflicting ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold inline-flex items-center gap-1 shadow-xs cursor-help" title="Rate-Limiting Warning: Triggers within 5 minutes of another schedule in this channel (' + escapeHtml(server.channelId) + '). Potential rate-limiting risk!"><i class="fa-solid fa-triangle-exclamation text-[9px] text-amber-400 animate-pulse"></i> &le;5m Rate-Limit Risk</span>' : ''}
                                             </div>
                                         </td>
                                         <td class="py-2.5 mono text-discord-muted">${escapeHtml(sched.cron)}</td>
@@ -2162,6 +2328,109 @@ function renderServers() {
     updateBulkSelectionUI();
 }
 
+// --- CONFIRMATION DIALOGUE BOX (Replaces browser popups for deleting servers, schedules, bulk items) ---
+let confirmDialogResolve = null;
+
+function showConfirmDialog({
+    title = 'Confirm Action',
+    message = 'Are you sure you want to proceed?',
+    details = [],
+    icon = 'fa-solid fa-triangle-exclamation',
+    iconColor = 'rose',
+    confirmText = 'Delete',
+    confirmClass = 'bg-rose-600 hover:bg-rose-500 text-white',
+    cancelText = 'Cancel'
+}) {
+    return new Promise((resolve) => {
+        confirmDialogResolve = resolve;
+
+        const modal = document.getElementById('confirmDialogModal');
+        const titleEl = document.getElementById('confirmDialogTitle');
+        const msgEl = document.getElementById('confirmDialogMessage');
+        const detailsEl = document.getElementById('confirmDialogDetailsBox');
+        const iconEl = document.getElementById('confirmDialogIcon');
+        const iconBox = document.getElementById('confirmDialogIconBox');
+        const confirmBtn = document.getElementById('confirmDialogConfirmBtn');
+        const cancelBtn = document.getElementById('confirmDialogCancelBtn');
+
+        if (!modal) {
+            const fallback = window.confirm(`${title}\n\n${message}`);
+            return resolve(fallback);
+        }
+
+        if (titleEl) titleEl.textContent = title;
+        if (msgEl) msgEl.textContent = message;
+
+        if (detailsEl) {
+            if (Array.isArray(details) && details.length > 0) {
+                detailsEl.innerHTML = details.map(d => `
+                    <div class="flex items-center justify-between text-xs py-1 border-b border-discord-border/30 last:border-0">
+                        <span class="text-discord-muted font-medium">${escapeHtml(d.label)}:</span>
+                        <span class="font-semibold text-white truncate max-w-[240px]">${escapeHtml(d.value)}</span>
+                    </div>
+                `).join('');
+                detailsEl.classList.remove('hidden');
+            } else if (typeof details === 'string' && details.trim().length > 0) {
+                detailsEl.innerHTML = details;
+                detailsEl.classList.remove('hidden');
+            } else {
+                detailsEl.innerHTML = '';
+                detailsEl.classList.add('hidden');
+            }
+        }
+
+        if (iconEl) iconEl.className = icon;
+        if (iconBox) {
+            if (iconColor === 'amber') {
+                iconBox.className = 'w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shrink-0';
+            } else if (iconColor === 'indigo') {
+                iconBox.className = 'w-11 h-11 rounded-xl bg-indigo-500/15 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-lg shrink-0';
+            } else {
+                iconBox.className = 'w-11 h-11 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/30 flex items-center justify-center text-lg shrink-0';
+            }
+        }
+
+        if (confirmBtn) {
+            confirmBtn.className = `px-4 py-2 text-xs font-bold rounded-lg shadow transition cursor-pointer ${confirmClass}`;
+            confirmBtn.textContent = confirmText;
+        }
+        if (cancelBtn) {
+            cancelBtn.textContent = cancelText;
+        }
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        setTimeout(() => {
+            if (cancelBtn) cancelBtn.focus();
+        }, 50);
+    });
+}
+
+function resolveConfirmDialog(result) {
+    const modal = document.getElementById('confirmDialogModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    if (typeof confirmDialogResolve === 'function') {
+        const resolve = confirmDialogResolve;
+        confirmDialogResolve = null;
+        resolve(Boolean(result));
+    }
+}
+
+// Global keydown listener for ESC key to close confirmation dialog safely
+window.addEventListener('keydown', (e) => {
+    const confirmModal = document.getElementById('confirmDialogModal');
+    if (confirmModal && !confirmModal.classList.contains('hidden')) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            resolveConfirmDialog(false);
+        }
+    }
+});
+
 // --- SERVER MODAL ACTIONS ---
 function openAddServerModal() {
     document.getElementById('serverModalTitle').innerText = 'Add Server Profile';
@@ -2199,10 +2468,35 @@ function closeServerModal() {
 async function handleSaveServer(e) {
     e.preventDefault();
     const id = document.getElementById('modalServerId').value;
-    const name = document.getElementById('modalServerName').value;
-    const channelId = document.getElementById('modalServerChannelId').value;
-    const webhookUrl = document.getElementById('modalServerWebhook').value;
+    const name = document.getElementById('modalServerName').value.trim();
+    const channelId = document.getElementById('modalServerChannelId').value.trim();
+    const webhookUrl = document.getElementById('modalServerWebhook').value.trim();
     const active = document.getElementById('modalServerActive').checked;
+
+    if (!name || !channelId) {
+        showNotificationToast('Server name and Channel ID are required.', 'warning');
+        return;
+    }
+
+    // Client-side check for duplicate server profile when creating
+    if (!id) {
+        const cleanChan = channelId.toLowerCase();
+        const cleanName = name.toLowerCase();
+        const existingServer = (currentConfig.servers || []).find(s => 
+            (s.channelId && s.channelId.trim().toLowerCase() === cleanChan) ||
+            (s.name && s.name.trim().toLowerCase() === cleanName)
+        );
+
+        if (existingServer) {
+            closeServerModal();
+            showNotificationToast(`Server "${existingServer.name}" already exists! Redirecting to add schedule...`, 'warning');
+            openAddScheduleModal(existingServer.id, {
+                redirected: true,
+                reason: `Server "${existingServer.name}" (Channel ID: ${existingServer.channelId}) is already configured. Add your attendance schedule below.`
+            });
+            return;
+        }
+    }
 
     try {
         let res;
@@ -2221,16 +2515,32 @@ async function handleSaveServer(e) {
                 body: JSON.stringify({ name, channelId, webhookUrl, active }),
             });
         }
+
         if (res.ok) {
             closeServerModal();
+            showNotificationToast(id ? `Server "${name}" updated successfully.` : `Server "${name}" profile created!`, 'success');
             await fetchConfig();
             await fetchStatus();
+        } else if (res.status === 409) {
+            // Server profile duplicate conflict from backend
+            const errData = await res.json();
+            closeServerModal();
+            const existingId = errData.existingServer ? errData.existingServer.id : null;
+            if (existingId) {
+                showNotificationToast(errData.error || `Server "${name}" already exists! Redirecting to add schedule...`, 'warning');
+                openAddScheduleModal(existingId, {
+                    redirected: true,
+                    reason: errData.error || `Server "${name}" already exists. Add your attendance routine below.`
+                });
+            } else {
+                showNotificationToast(errData.error || 'Server profile already exists.', 'warning');
+            }
         } else {
             const err = await res.json();
-            alert(`Failed to save server: ${err.error || 'Unknown error'}`);
+            showNotificationToast(`Failed to save server: ${err.error || 'Unknown error'}`, 'danger');
         }
     } catch (err) {
-        alert(`Error saving server: ${err.message}`);
+        showNotificationToast(`Error saving server: ${err.message}`, 'danger');
     }
 }
 
@@ -2247,21 +2557,45 @@ async function toggleServerActive(serverId) {
         await fetchConfig();
         await fetchStatus();
     } catch (err) {
-        alert(`Error toggling server: ${err.message}`);
+        showNotificationToast(`Error toggling server: ${err.message}`, 'danger');
     }
 }
 
 async function deleteServer(serverId) {
     const server = (currentConfig.servers || []).find(s => String(s.id) === String(serverId));
     if (!server) return;
-    if (!confirm(`Are you sure you want to delete server "${server.name}" and all its schedules?`)) return;
+
+    const schedCount = (server.schedules || []).length;
+    const confirmed = await showConfirmDialog({
+        title: 'Delete Server Profile',
+        message: `Are you sure you want to permanently delete "${server.name}"? This action cannot be undone.`,
+        details: [
+            { label: 'Server Profile', value: server.name },
+            { label: 'Channel ID', value: server.channelId },
+            { label: 'Associated Schedules', value: `${schedCount} routine(s)` },
+            { label: 'Active Daemon Watcher', value: server.active ? 'Active (Will be stopped)' : 'Paused' }
+        ],
+        icon: 'fa-solid fa-trash-can',
+        iconColor: 'rose',
+        confirmText: 'Delete Server',
+        confirmClass: 'bg-rose-600 hover:bg-rose-500 text-white',
+        cancelText: 'Cancel'
+    });
+
+    if (!confirmed) return;
 
     try {
-        await fetch(`/api/servers/${serverId}`, { method: 'DELETE' });
-        await fetchConfig();
-        await fetchStatus();
+        const res = await fetch(`/api/servers/${serverId}`, { method: 'DELETE' });
+        if (res.ok) {
+            showNotificationToast(`Server "${server.name}" and all schedules deleted.`, 'info');
+            await fetchConfig();
+            await fetchStatus();
+        } else {
+            const err = await res.json();
+            showNotificationToast(`Failed to delete server: ${err.error || 'Server error'}`, 'danger');
+        }
     } catch (err) {
-        alert(`Error deleting server: ${err.message}`);
+        showNotificationToast(`Error deleting server: ${err.message}`, 'danger');
     }
 }
 
@@ -2346,7 +2680,7 @@ function setMode(mode) {
     }
 }
 
-function openAddScheduleModal(serverId) {
+function openAddScheduleModal(serverId, options = {}) {
     document.getElementById('scheduleModalTitle').innerText = 'Add Attendance Schedule';
     document.getElementById('modalScheduleServerId').value = serverId;
     document.getElementById('modalScheduleId').value = '';
@@ -2361,6 +2695,20 @@ function openAddScheduleModal(serverId) {
     document.getElementById('jitterDisplay').innerText = '10 mins';
     document.getElementById('modalScheduleActive').checked = true;
 
+    // Handle Duplicate Redirect Notice banner
+    const noticeBox = document.getElementById('scheduleRedirectNotice');
+    const noticeText = document.getElementById('scheduleRedirectNoticeText');
+    if (noticeBox && noticeText) {
+        if (options && options.redirected) {
+            const server = (currentConfig.servers || []).find(s => String(s.id) === String(serverId));
+            const sName = server ? server.name : 'Target Server';
+            noticeText.textContent = options.reason || `Server "${sName}" is already registered. You can configure an attendance schedule for it below.`;
+            noticeBox.classList.remove('hidden');
+        } else {
+            noticeBox.classList.add('hidden');
+        }
+    }
+
     setMode('MESSAGE');
     handleFrequencyChange();
 
@@ -2370,6 +2718,9 @@ function openAddScheduleModal(serverId) {
 }
 
 function openEditScheduleModal(serverId, scheduleId) {
+    const noticeBox = document.getElementById('scheduleRedirectNotice');
+    if (noticeBox) noticeBox.classList.add('hidden');
+
     const server = (currentConfig.servers || []).find(s => String(s.id) === String(serverId));
     if (!server) return;
     const schedule = (server.schedules || []).find(sc => String(sc.id) === String(scheduleId));
@@ -2414,6 +2765,9 @@ function openEditScheduleModal(serverId, scheduleId) {
 }
 
 function closeScheduleModal() {
+    const noticeBox = document.getElementById('scheduleRedirectNotice');
+    if (noticeBox) noticeBox.classList.add('hidden');
+
     const modal = document.getElementById('scheduleModal');
     modal.classList.add('hidden');
     modal.classList.remove('flex');
@@ -2519,13 +2873,40 @@ async function toggleScheduleActive(serverId, scheduleId) {
 }
 
 async function deleteSchedule(serverId, scheduleId) {
-    if (!confirm('Are you sure you want to delete this schedule?')) return;
+    const server = (currentConfig.servers || []).find(s => String(s.id) === String(serverId));
+    const sched = server ? (server.schedules || []).find(sc => String(sc.id) === String(scheduleId)) : null;
+    const schedLabel = sched ? sched.label : 'Attendance Routine';
+
+    const confirmed = await showConfirmDialog({
+        title: 'Delete Attendance Schedule',
+        message: `Are you sure you want to remove the schedule routine "${schedLabel}"?`,
+        details: sched ? [
+            { label: 'Schedule Routine', value: sched.label },
+            { label: 'Server Profile', value: server ? server.name : 'Unknown' },
+            { label: 'Frequency (Cron)', value: sched.cron },
+            { label: 'Attendance Mode', value: sched.attendanceType === 'REACTION' ? `Reaction (${sched.emoji || '👍'})` : `Message ("${sched.message || 'Present'}")` }
+        ] : [],
+        icon: 'fa-solid fa-clock-rotate-left',
+        iconColor: 'rose',
+        confirmText: 'Delete Schedule',
+        confirmClass: 'bg-rose-600 hover:bg-rose-500 text-white',
+        cancelText: 'Cancel'
+    });
+
+    if (!confirmed) return;
+
     try {
-        await fetch(`/api/servers/${serverId}/schedules/${scheduleId}`, { method: 'DELETE' });
-        await fetchConfig();
-        await fetchStatus();
+        const res = await fetch(`/api/servers/${serverId}/schedules/${scheduleId}`, { method: 'DELETE' });
+        if (res.ok) {
+            showNotificationToast(`Schedule "${schedLabel}" deleted successfully.`, 'info');
+            await fetchConfig();
+            await fetchStatus();
+        } else {
+            const err = await res.json();
+            showNotificationToast(`Failed to delete schedule: ${err.error || 'Server error'}`, 'danger');
+        }
     } catch (err) {
-        alert(`Error deleting schedule: ${err.message}`);
+        showNotificationToast(`Error deleting schedule: ${err.message}`, 'danger');
     }
 }
 
@@ -2941,32 +3322,60 @@ let cliHistoryIndex = -1;
 
 function initCliTerminalShortcuts() {
     const input = document.getElementById('cliTerminalInput');
-    if (!input) return;
-
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            if (cliCommandHistory.length === 0) return;
-            if (cliHistoryIndex === -1) {
-                cliHistoryIndex = cliCommandHistory.length - 1;
-            } else if (cliHistoryIndex > 0) {
-                cliHistoryIndex--;
-            }
-            input.value = cliCommandHistory[cliHistoryIndex] || '';
-            input.selectionStart = input.selectionEnd = input.value.length;
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            if (cliHistoryIndex === -1) return;
-            if (cliHistoryIndex < cliCommandHistory.length - 1) {
-                cliHistoryIndex++;
+    if (input) {
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (cliCommandHistory.length === 0) return;
+                if (cliHistoryIndex === -1) {
+                    cliHistoryIndex = cliCommandHistory.length - 1;
+                } else if (cliHistoryIndex > 0) {
+                    cliHistoryIndex--;
+                }
                 input.value = cliCommandHistory[cliHistoryIndex] || '';
-            } else {
-                cliHistoryIndex = -1;
-                input.value = '';
+                input.selectionStart = input.selectionEnd = input.value.length;
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (cliHistoryIndex === -1) return;
+                if (cliHistoryIndex < cliCommandHistory.length - 1) {
+                    cliHistoryIndex++;
+                    input.value = cliCommandHistory[cliHistoryIndex] || '';
+                } else {
+                    cliHistoryIndex = -1;
+                    input.value = '';
+                }
+                input.selectionStart = input.selectionEnd = input.value.length;
             }
-            input.selectionStart = input.selectionEnd = input.value.length;
-        }
-    });
+        });
+    }
+
+    initCliTerminalSkin();
+}
+
+function initCliTerminalSkin() {
+    const win = document.getElementById('cliTerminalWindow');
+    if (!win) return;
+    const savedSkin = localStorage.getItem('attendancebot_terminal_skin');
+    if (savedSkin === 'dark') {
+        win.classList.add('force-dark-terminal');
+    } else if (savedSkin === 'light') {
+        win.classList.remove('force-dark-terminal');
+    }
+}
+
+function toggleCliTerminalSkin() {
+    const win = document.getElementById('cliTerminalWindow');
+    if (!win) return;
+    const isForcedDark = win.classList.contains('force-dark-terminal');
+    if (isForcedDark) {
+        win.classList.remove('force-dark-terminal');
+        localStorage.setItem('attendancebot_terminal_skin', 'light');
+        showNotificationToast('Terminal switched to light appearance', 'info');
+    } else {
+        win.classList.add('force-dark-terminal');
+        localStorage.setItem('attendancebot_terminal_skin', 'dark');
+        showNotificationToast('Terminal switched to dark appearance', 'info');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3007,10 +3416,10 @@ async function executeCliCommand(commandLine) {
 
     // Render User Command Prompt
     const cmdEl = document.createElement('div');
-    cmdEl.className = 'mt-2 pt-1 border-t border-zinc-800/80 flex items-start gap-1.5';
+    cmdEl.className = 'cli-cmd-line mt-2 pt-1 border-t border-zinc-800/80 flex items-start gap-1.5';
     cmdEl.innerHTML = `
-        <span class="text-emerald-400 font-bold select-none">attendancebot:~$</span>
-        <span class="text-white font-semibold">${escapeHtml(commandLine)}</span>
+        <span class="cli-prompt text-emerald-400 font-bold select-none">attendancebot:~$</span>
+        <span class="cli-cmd-text text-white font-semibold">${escapeHtml(commandLine)}</span>
     `;
     terminalOutput.appendChild(cmdEl);
 
@@ -3036,7 +3445,7 @@ async function executeCliCommand(commandLine) {
             `;
         } else {
             const outEl = document.createElement('div');
-            outEl.className = data.success ? 'text-zinc-300 whitespace-pre-wrap' : 'text-rose-400 whitespace-pre-wrap';
+            outEl.className = data.success ? 'cli-output-text text-zinc-300 whitespace-pre-wrap' : 'cli-error-text text-rose-400 whitespace-pre-wrap';
             outEl.textContent = data.output || '(No output)';
             terminalOutput.appendChild(outEl);
         }
@@ -3058,7 +3467,7 @@ async function executeCliCommand(commandLine) {
         }
     } catch (err) {
         const errEl = document.createElement('div');
-        errEl.className = 'text-rose-400';
+        errEl.className = 'cli-error-text text-rose-400';
         errEl.textContent = `❌ CLI Communication Error: ${err.message}`;
         terminalOutput.appendChild(errEl);
     } finally {

@@ -11,6 +11,12 @@ const fs = require('fs');
 const path = require('path');
 const cron = require('node-cron');
 const https = require('https');
+const { exec } = require('child_process');
+
+const defaultDaemonManager = require('./daemonManager');
+const defaultLogger = require('./logger');
+const defaultAttendanceHistory = require('./attendanceHistory');
+const { validateConfigSchema } = require('./schemaValidator');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
@@ -48,9 +54,9 @@ function formatDuration(ms) {
 
 class CliEngine {
     constructor(deps = {}) {
-        this.daemonManager = deps.daemonManager || null;
-        this.logger = deps.logger || null;
-        this.attendanceHistory = deps.attendanceHistory || null;
+        this.daemonManager = deps.daemonManager || defaultDaemonManager;
+        this.logger = deps.logger || defaultLogger;
+        this.attendanceHistory = deps.attendanceHistory || defaultAttendanceHistory;
     }
 
     getConfig() {
@@ -151,6 +157,16 @@ class CliEngine {
                 case 'export':
                     return this.cmdBackup();
 
+                case 'import':
+                    return await this.cmdImport(args.slice(1));
+
+                case 'validate':
+                    return await this.cmdValidate(args.slice(1));
+
+                case 'service':
+                case 'pm2':
+                    return await this.cmdService(args.slice(1));
+
                 case 'uptime':
                     return this.cmdUptime();
 
@@ -180,6 +196,8 @@ class CliEngine {
                     '📌 Server Profile Commands:',
                     '  server list                            List all server profiles',
                     '  server add <name> <channelId> [cron] [msg] Quick-add server profile',
+                    '  server edit <id> [name] [chan] [hook]  Edit server profile details',
+                    '  server toggle <id|name>                Toggle pause / resume for server',
                     '  server pause <id|name>                 Pause automated monitoring for server',
                     '  server resume <id|name>                Resume automated monitoring for server',
                     '  server delete <id|name>                Delete a server profile',
@@ -196,16 +214,19 @@ class CliEngine {
                     '📌 Schedule Commands:',
                     '  schedule list <serverId|name>          List schedules for a server',
                     '  schedule add <serverId> <cron> [msg]   Add schedule (e.g. "0 9 * * 1-5")',
-                    '  schedule delete <serverId> <schedId>   Delete a schedule from a server',
+                    '  schedule toggle <serverId> <schedId>   Toggle active / paused on schedule',
                     '  schedule pause <serverId> <schedId>    Pause a specific schedule',
                     '  schedule resume <serverId> <schedId>   Resume a specific schedule',
+                    '  schedule delete <serverId> <schedId>   Delete a schedule from a server',
+                    '  schedule reorder <serverId> <id1,id2>  Reorder schedules by priority',
+                    '  schedule move <serverId> <from> <to>   Move schedule between positions',
                 ].join('\n')
             };
         }
 
         const lines = [
             '═══════════════════════════════════════════════════════════════',
-            '⚡ AttendanceBot CLI Commands & Operations',
+            '⚡ AttendanceBot CLI Commands & Operations (v3.3.0)',
             '═══════════════════════════════════════════════════════════════',
             '  status                                 Show daemon status & health overview',
             '  start                                  Start background Discord attendance daemon',
@@ -214,14 +235,16 @@ class CliEngine {
             '  list (or servers)                      List configured servers and schedules',
             '',
             '  server add <name> <chanId> [cron] [msg] Create a new server profile',
-            '  server pause <id|name>                 Pause attendance check-ins for server',
-            '  server resume <id|name>                Resume attendance check-ins for server',
+            '  server edit <id> [name] [chan] [hook]  Edit server name, channel, or webhook',
+            '  server toggle <id|name>                Pause / Resume a server profile',
             '  server delete <id|name>                Remove a server profile',
             '  server enable-all / disable-all        Bulk enable or disable all servers',
             '',
             '  schedule add <srvId> <cron> [message]  Add attendance schedule to server',
             '  schedule list <srvId>                  List all schedules for a server',
+            '  schedule toggle <srvId> <schedId>      Pause / Resume a specific schedule',
             '  schedule delete <srvId> <schedId>      Remove schedule from server',
+            '  schedule reorder <srvId> <id1,id2>     Reorder schedule priority sequence',
             '',
             '  trigger <serverId> [scheduleId]        Manually trigger attendance run now',
             '  logs [count]                           Display recent activity logs (default: 15)',
@@ -229,7 +252,11 @@ class CliEngine {
             '  token [new_token]                      View or update Discord user token',
             '  webhook [url]                          View or update Discord notification webhook',
             '  webhook test [url]                     Test webhook delivery with embed alert',
-            '  backup                                 Export current configuration JSON',
+            '',
+            '  backup (or export)                     Export current configuration JSON',
+            '  validate <path/to/file.json>           Validate JSON schema structure',
+            '  import <path/to/file.json> [merge]     Import JSON with strict schema check',
+            '  service <status|install|stop|logs>     Manage background PM2 service',
             '  uptime                                 View uptime and execution reliability',
             '  clear                                  Clear terminal screen',
             '═══════════════════════════════════════════════════════════════',
@@ -410,6 +437,20 @@ class CliEngine {
                 };
             }
 
+            const cleanChan = channelId.trim();
+            const cleanName = name.trim().toLowerCase();
+            const existingServer = servers.find(
+                (s) => (s.channelId && s.channelId.trim() === cleanChan) ||
+                       (s.name && s.name.trim().toLowerCase() === cleanName)
+            );
+
+            if (existingServer) {
+                return {
+                    success: false,
+                    output: `⚠️ Server profile "${existingServer.name}" already exists (Channel: ${existingServer.channelId}, ID: ${existingServer.id}).\nTo add a schedule to this server, run:\n  schedule add ${existingServer.id} "${cronExp}" "${message}"`
+                };
+            }
+
             if (cronExp && !cron.validate(cronExp)) {
                 return {
                     success: false,
@@ -485,6 +526,39 @@ class CliEngine {
             return {
                 success: true,
                 output: `🗑️ Server "${removed.name}" (ID: ${removed.id}) has been deleted.`
+            };
+        }
+
+        if (sub === 'toggle') {
+            const target = args[1];
+            if (!target) return { success: false, output: '❌ Usage: server toggle <serverId|serverName>' };
+            const srv = servers.find(s => String(s.id) === target || s.name.toLowerCase() === target.toLowerCase());
+            if (!srv) return { success: false, output: `❌ Server "${target}" not found.` };
+            srv.active = !srv.active;
+            config.servers = servers;
+            this.saveConfig(config);
+            return {
+                success: true,
+                output: `✅ Server "${srv.name}" (ID: ${srv.id}) is now ${srv.active ? 'ACTIVE' : 'PAUSED'}.`
+            };
+        }
+
+        if (sub === 'edit') {
+            const target = args[1];
+            const newName = args[2];
+            const newChan = args[3];
+            const newWebhook = args[4];
+            if (!target) return { success: false, output: '❌ Usage: server edit <serverId|serverName> [newName] [newChannelId] [newWebhookUrl]' };
+            const srv = servers.find(s => String(s.id) === target || s.name.toLowerCase() === target.toLowerCase());
+            if (!srv) return { success: false, output: `❌ Server "${target}" not found.` };
+            if (newName && newName !== '-') srv.name = newName.trim();
+            if (newChan && newChan !== '-') srv.channelId = newChan.trim();
+            if (newWebhook !== undefined && newWebhook !== '-') srv.webhookUrl = newWebhook.trim();
+            config.servers = servers;
+            this.saveConfig(config);
+            return {
+                success: true,
+                output: `✅ Server "${srv.name}" (ID: ${srv.id}) updated.\nChannel: ${srv.channelId} | Webhook: ${srv.webhookUrl || 'None'}`
             };
         }
 
@@ -583,6 +657,25 @@ class CliEngine {
             return {
                 success: true,
                 output: `🗑️ Schedule "${removed.label}" deleted from server "${srv.name}".`
+            };
+        }
+
+        if (sub === 'toggle' || sub === 'pause' || sub === 'resume') {
+            const target = args[1];
+            const schedId = args[2];
+            if (!target || !schedId) return { success: false, output: `❌ Usage: schedule ${sub} <serverId> <scheduleId>` };
+            const srv = servers.find(s => String(s.id) === target || s.name.toLowerCase() === target.toLowerCase());
+            if (!srv) return { success: false, output: `❌ Server "${target}" not found.` };
+            const sc = (srv.schedules || []).find(s => String(s.id) === String(schedId));
+            if (!sc) return { success: false, output: `❌ Schedule "${schedId}" not found on server "${srv.name}".` };
+            if (sub === 'toggle') sc.active = !sc.active;
+            else if (sub === 'pause') sc.active = false;
+            else if (sub === 'resume') sc.active = true;
+            config.servers = servers;
+            this.saveConfig(config);
+            return {
+                success: true,
+                output: `✅ Schedule "${sc.label}" on server "${srv.name}" is now ${sc.active ? 'ACTIVE' : 'PAUSED'}.`
             };
         }
 
@@ -848,6 +941,132 @@ class CliEngine {
         });
 
         return { success: true, output: lines.join('\n') };
+    }
+
+    async cmdValidate(args) {
+        const filePath = args[0];
+        if (!filePath) {
+            return { success: false, output: '❌ Usage: validate <path/to/config.json>' };
+        }
+        const resolvedPath = path.resolve(process.cwd(), filePath);
+        if (!fs.existsSync(resolvedPath)) {
+            return { success: false, output: `❌ File not found: ${filePath}` };
+        }
+        try {
+            const raw = fs.readFileSync(resolvedPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            const res = validateConfigSchema(parsed);
+            if (res.isValid) {
+                let out = `✅ Schema Validation PASSED for "${path.basename(filePath)}"!\n`;
+                out += `  • Servers Verified  : ${res.stats.serverCount}\n`;
+                out += `  • Schedules Verified: ${res.stats.scheduleCount}\n`;
+                if (res.warnings.length > 0) {
+                    out += `\n⚠️ Warnings (${res.warnings.length}):\n` + res.warnings.map(w => `  • ${w}`).join('\n');
+                }
+                return { success: true, output: out };
+            } else {
+                let out = `❌ Schema Validation FAILED for "${path.basename(filePath)}":\n`;
+                out += `Found ${res.errors.length} error(s):\n`;
+                out += res.errors.map((e, idx) => `  ${idx + 1}. ${e}`).join('\n');
+                if (res.warnings.length > 0) {
+                    out += `\nWarnings (${res.warnings.length}):\n` + res.warnings.map(w => `  • ${w}`).join('\n');
+                }
+                return { success: false, output: out };
+            }
+        } catch (err) {
+            return { success: false, output: `❌ JSON Parse Error in "${filePath}": ${err.message}` };
+        }
+    }
+
+    async cmdImport(args) {
+        const filePath = args[0];
+        const mode = (args[1] || 'merge').toLowerCase();
+        if (!filePath) {
+            return { success: false, output: '❌ Usage: import <path/to/config.json> [merge|replace]' };
+        }
+        const resolvedPath = path.resolve(process.cwd(), filePath);
+        if (!fs.existsSync(resolvedPath)) {
+            return { success: false, output: `❌ File not found: ${filePath}` };
+        }
+        try {
+            const raw = fs.readFileSync(resolvedPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            const res = validateConfigSchema(parsed);
+            if (!res.isValid) {
+                let out = `❌ Import rejected: Schema validation failed for "${path.basename(filePath)}":\n`;
+                out += res.errors.map((e, idx) => `  ${idx + 1}. ${e}`).join('\n');
+                return { success: false, output: out };
+            }
+
+            const config = this.getConfig();
+            const incomingServers = res.sanitized.servers;
+
+            if (mode === 'merge') {
+                incomingServers.forEach(incoming => {
+                    const idx = config.servers.findIndex(s => String(s.id) === String(incoming.id));
+                    if (idx >= 0) {
+                        config.servers[idx] = incoming;
+                    } else {
+                        config.servers.push(incoming);
+                    }
+                });
+            } else {
+                config.servers = incomingServers;
+            }
+
+            if (res.sanitized.globalWebhookUrl && !config.globalWebhookUrl) {
+                config.globalWebhookUrl = res.sanitized.globalWebhookUrl;
+            }
+
+            const saved = this.saveConfig(config);
+            if (!saved) {
+                return { success: false, output: '❌ Failed to save configuration to disk.' };
+            }
+
+            if (this.daemonManager && this.daemonManager.status === 'RUNNING') {
+                this.daemonManager.initializeSchedules(config);
+            }
+
+            let out = `🎉 Successfully imported ${incomingServers.length} server profile(s) (${mode} mode) with schema validation passed!\n`;
+            out += `Total servers configured: ${config.servers.length} | Schedules: ${res.stats.scheduleCount}`;
+            if (res.warnings.length > 0) {
+                out += `\n⚠️ Warnings:\n` + res.warnings.map(w => `  • ${w}`).join('\n');
+            }
+            return { success: true, output: out };
+        } catch (err) {
+            return { success: false, output: `❌ Import error: ${err.message}` };
+        }
+    }
+
+    async cmdService(args) {
+        const sub = (args[0] || 'status').toLowerCase();
+        const runExec = (cmd) => new Promise((resolve) => {
+            exec(cmd, { cwd: path.join(__dirname, '..') }, (err, stdout, stderr) => {
+                resolve((stdout || stderr || '').trim());
+            });
+        });
+
+        if (sub === 'status') {
+            const out = await runExec('npx pm2 status attendanceBot-daemon');
+            return { success: true, output: out || 'PM2 service check completed.' };
+        }
+        if (sub === 'install' || sub === 'start') {
+            const out = await runExec('node bin/install-service.js');
+            return { success: true, output: out || 'Service installed.' };
+        }
+        if (sub === 'uninstall' || sub === 'stop') {
+            const out = await runExec('node bin/uninstall-service.js');
+            return { success: true, output: out || 'Service uninstalled.' };
+        }
+        if (sub === 'logs') {
+            const lines = args[1] || '20';
+            const out = await runExec(`npx pm2 logs attendanceBot-daemon --lines ${lines} --nostream`);
+            return { success: true, output: out || 'No PM2 logs available.' };
+        }
+        return {
+            success: false,
+            output: '❌ Usage: service <status|install|uninstall|logs [lines]>'
+        };
     }
 }
 

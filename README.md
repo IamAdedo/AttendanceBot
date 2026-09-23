@@ -9,14 +9,14 @@
 ╚══════╝╚══════╝╚══════╝
 ```
 
-> **AttendanceBot v3.0.0 by IamAdedo, dlazyHNTR**  
-> *Automated multi-server Discord daily attendance background daemon with an interactive Web Management Dashboard, drag-and-drop schedule prioritization, real-time check-in telemetry, and a complete CLI suite.*
+> **AttendanceBot v3.2.0 by IamAdedo, dlazyHNTR**  
+> *Automated multi-server Discord daily attendance background daemon with an interactive Web Management Dashboard, drag-and-drop schedule prioritization, real-time check-in telemetry, rate-limit conflict warnings, and a complete CLI suite.*
 
 ---
 
 ## 📌 Badges & Metadata
 
-- **Current Version:** `v3.0.0`
+- **Current Version:** `v3.2.0`
 - **Dashboard Port:** `http://localhost:3000`
 - **Node.js Requirement:** `18.0.0` or higher
 - **License:** MIT
@@ -29,7 +29,7 @@
 **AttendanceBot** automates daily attendance and scheduled check-ins across multiple Discord servers and channels. It supports sending custom text messages (e.g., `"Present"`, multi-line updates) or reacting with emojis to messages at defined schedules.
 
 You can manage the bot via:
-1. **Interactive Web Dashboard** on `http://localhost:3000` with real-time statistics, drag-and-drop reordering, and one-click manual test runs.
+1. **Interactive Web Dashboard** on `http://localhost:3000` with real-time statistics, drag-and-drop reordering, one-click manual test runs, and rate-limit conflict detection.
 2. **Terminal CLI & Remote Controller** (`npm run cli` / `node bin/cli.js`) for rapid headless administration.
 3. **Background Daemon** running 24/7 with auto-restart on system boot.
 
@@ -38,9 +38,10 @@ You can manage the bot via:
 ## ✨ Features
 
 - 🌐 **Modern Web Management Dashboard** — Responsive Discord dark/light interface on port 3000 for managing servers, schedules, credentials, and live daemon controls.
-- 🔀 **Drag-and-Drop Schedule Prioritization** *(New in v3)* — Reorder attendance execution sequences with intuitive drag-and-drop rows, priority indicators (`#1`, `#2`...), and up/down controls.
-- ⏱️ **Time Elapsed Since Last Check-in** *(New in v3)* — Live check-in clock badge (`fa-regular fa-clock`) on each server profile row and server header calculating exact elapsed time since the last successful attendance check-in.
-- ▶️ **One-Click 'Test Run' Play Button** *(New in v3)* — Execute immediate manual test runs on any schedule with animated spinner states, instant toast notifications, and live telemetry updates.
+- ⚠️ **Rate-Limit Conflict Detection & Visual Warning Icons** *(New in v3.1)* — Prominent visual warning icons on the server profile card (avatar badge, header tag, channel row, and schedule rows) when multiple routines trigger within a 5-minute window in the same channel, preventing potential Discord rate-limiting.
+- 🔀 **Drag-and-Drop Schedule Prioritization** — Reorder attendance execution sequences with intuitive drag-and-drop rows, priority indicators (`#1`, `#2`...), and up/down controls.
+- ⏱️ **Time Elapsed Since Last Check-in** — Live check-in clock badge (`fa-regular fa-clock`) on each server profile row and server header calculating exact elapsed time since the last successful attendance check-in.
+- ▶️ **One-Click 'Test Run' Play Button** — Execute immediate manual test runs on any schedule with animated spinner states, instant toast notifications, and live telemetry updates.
 - 💻 **Interactive CLI Suite** — Headless terminal CLI with commands for status, logs, server management, and schedule ordering (`schedule move`, `schedule reorder`).
 - 🏢 **Multi-Server & Multi-Schedule Profiles** — Manage unlimited Discord servers, each with distinct channel targets, frequencies, and payloads.
 - 📅 **Flexible Scheduling Modes** — Everyday, weekdays, weekends, specific repeating weekdays (e.g., every Monday), or a **one-time calendar date** that auto-disables after execution.
@@ -228,7 +229,38 @@ npm run service:uninstall
 
 ## 📝 Changelog
 
-### Version 3.0.0 (Current Version)
+### Version 3.2.0 (Current)
+- **🖥️ Light-Mode CLI Terminal Readability Overhaul:**
+  - Redesigned light-theme styles for the web-based interactive CLI console.
+  - Command prompts (`attendancebot:~$`), user input, execution output, error states, and quick-command chips now feature crisp, accessible contrast in light mode.
+  - Added interactive Terminal Appearance toggle (`fa-circle-half-stroke`) allowing users to switch the CLI between clean light theme and classic hacker dark terminal skin independently.
+- **🛡️ Duplicate Server Profile Prevention & Smart Schedule Redirect:**
+  - Added duplicate server validation by Server Name and Discord Channel ID across REST API (`POST /api/servers`), frontend modal (`handleSaveServer`), and CLI engine (`server add`).
+  - When a duplicate server is entered, the app gracefully dismisses the server creation dialog, displays a toast notification, and automatically redirects the user to the "Add Attendance Schedule" dialog pre-targeted to that server with an informative banner.
+- **💬 Custom Dialogue Boxes for All Deletions:**
+  - Completely replaced native browser `confirm()` popups with styled, accessible modal dialogs (`#confirmDialogModal`).
+  - Applied to single server profile deletion, schedule routine deletion, bulk server deletion, and configuration snapshot restores.
+  - Displays rich context cards (Server Name, Channel ID, affected routines, backup timestamps), customized action icons, and keyboard support (`Escape` to safely dismiss, auto-focus on Cancel).
+- **⚠️ Rate-Limit Overlap Warning Badges:**
+  - Prominent visual warning icons on the server profile card (avatar badge, header tag, channel row, and schedule rows) when multiple routines trigger within a 5-minute window in the same channel, preventing potential Discord rate-limiting.
+
+---
+
+### Version 3.1.0
+- **⚠️ Rate-Limit Conflict Warning Icons:**
+  - Added visual warning icons (`fa-solid fa-triangle-exclamation`) across server profile cards:
+    - Floating warning badge on server `#` icon box.
+    - Prominent `Rate-Limit Warning (≤5m overlap)` tag next to the server profile title.
+    - Conflict indicator tag in the server metadata bar next to the channel ID and last check-in clock.
+    - Per-schedule `≤5m Rate-Limit Risk` badge in each schedule table row.
+  - Mitigates potential Discord rate-limiting and temporary blocks when multiple schedules are scheduled to execute within the same 5-minute window for a channel.
+  - Enhanced warning banner detailing the exact schedule labels, execution times, minute differences, and practical anti-rate-limit spacing tips.
+- **🔄 Semantic Version Bump:**
+  - Followed version bump policy: bumped minor version from `3.0` to `3.1` across `package.json`, REST API exports, client headers, footers, and docs.
+
+---
+
+### Version 3.0.0
 - **🔀 Drag-and-Drop Schedule Prioritization:**
   - Added HTML5 drag-and-drop table rows allowing users to reorder attendance schedules visually.
   - Added execution sequence tags (`#1`, `#2`, ...) and up/down priority adjusters.
