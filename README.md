@@ -338,4 +338,4 @@ AttendanceBot adheres to semantic versioning guidelines:
 - **License:** MIT License
 - **Issues & Contributions:** Contributions and bug reports are welcome via GitHub Issues.
 
-*...with love by The !Lazy Hunter <||>*
+*...with love by [https://iamadedo.vercel.app](The !Lazy Hunter) <||>*
