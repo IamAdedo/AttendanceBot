@@ -1,12 +1,41 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const daemonManager = require('./src/daemonManager');
 const logger = require('./src/logger');
 const attendanceHistory = require('./src/attendanceHistory');
+const CliEngine = require('./src/cliEngine');
 
 const app = express();
 const PORT = 3000;
 const HOST = '0.0.0.0';
+
+const cliEngine = new CliEngine({ daemonManager, logger, attendanceHistory });
+
+// Bidirectional hot-sync: Watch config.json for external CLI or editor changes
+const CONFIG_FILE_PATH = path.join(__dirname, 'config.json');
+let configWatchDebounce = null;
+if (fs.existsSync(CONFIG_FILE_PATH)) {
+    fs.watchFile(CONFIG_FILE_PATH, { interval: 1000 }, (curr, prev) => {
+        if (curr.mtimeMs !== prev.mtimeMs) {
+            clearTimeout(configWatchDebounce);
+            configWatchDebounce = setTimeout(() => {
+                daemonManager.reloadConfigFromDisk();
+            }, 300);
+        }
+    });
+}
+
+// CORS and security headers for iframe / dev environment proxying
+app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+    }
+    next();
+});
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -15,18 +44,28 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Get daemon and application status
 app.get('/api/status', (req, res) => {
-    res.json(daemonManager.getStatus());
+    try {
+        res.json(daemonManager.getStatus());
+    } catch (err) {
+        logger.error(`Error in /api/status: ${err.message}`);
+        res.status(500).json({ error: 'Failed to retrieve status', details: err.message });
+    }
 });
 
 // Get current config
 app.get('/api/config', (req, res) => {
-    const config = daemonManager.getConfig();
-    // Return config with full info (or masked token preview)
-    res.json({
-        ...config,
-        hasToken: Boolean(config.globalToken && config.globalToken.trim()),
-        tokenPreview: config.globalToken ? `${config.globalToken.substring(0, 8)}...` : '',
-    });
+    try {
+        const config = daemonManager.getConfig();
+        // Return config with full info (or masked token preview)
+        res.json({
+            ...config,
+            hasToken: Boolean(config.globalToken && config.globalToken.trim()),
+            tokenPreview: config.globalToken ? `${config.globalToken.substring(0, 8)}...` : '',
+        });
+    } catch (err) {
+        logger.error(`Error in /api/config: ${err.message}`);
+        res.status(500).json({ error: 'Failed to retrieve config', details: err.message });
+    }
 });
 
 // Save whole config or update global settings
@@ -83,7 +122,7 @@ app.get('/api/config/export', (req, res) => {
     const config = daemonManager.getConfig();
     const exportData = {
         app: 'AttendanceBot',
-        version: '2.1.0',
+        version: '3.0.0',
         exportedAt: new Date().toISOString(),
         globalWebhookUrl: config.globalWebhookUrl || '',
         servers: config.servers || [],
@@ -358,6 +397,49 @@ app.delete('/api/servers/:serverId/schedules/:scheduleId', (req, res) => {
     res.json({ success: true, message: `Schedule ${removed.label} deleted` });
 });
 
+// Reorder schedules for a server profile (Drag-and-Drop sequence prioritization)
+app.post('/api/servers/:serverId/schedules/reorder', (req, res) => {
+    const { serverId } = req.params;
+    const { scheduleIds, schedules } = req.body;
+
+    const config = daemonManager.getConfig();
+    const server = config.servers.find((s) => String(s.id) === String(serverId));
+    if (!server) {
+        return res.status(404).json({ error: 'Server not found' });
+    }
+
+    if (Array.isArray(scheduleIds)) {
+        const scheduleMap = new Map((server.schedules || []).map((sc) => [String(sc.id), sc]));
+        const reordered = [];
+        scheduleIds.forEach((id) => {
+            const sc = scheduleMap.get(String(id));
+            if (sc) {
+                reordered.push(sc);
+                scheduleMap.delete(String(id));
+            }
+        });
+        // Append any omitted schedules to prevent data loss
+        scheduleMap.forEach((sc) => reordered.push(sc));
+        server.schedules = reordered;
+    } else if (Array.isArray(schedules)) {
+        server.schedules = schedules;
+    } else {
+        return res.status(400).json({ error: 'scheduleIds array or schedules array is required' });
+    }
+
+    const saved = daemonManager.saveConfig(config);
+    if (!saved) {
+        return res.status(500).json({ error: 'Failed to save configuration' });
+    }
+
+    if (daemonManager.status === 'RUNNING') {
+        daemonManager.initializeSchedules(config);
+    }
+
+    logger.info(`[${server.name}] Attendance schedules reordered for prioritized execution sequence.`);
+    res.json({ success: true, server, schedules: server.schedules });
+});
+
 // Test Webhook Dispatch
 app.post('/api/test-webhook', async (req, res) => {
     const { webhookUrl } = req.body;
@@ -438,6 +520,32 @@ app.post('/api/logs/clear', (req, res) => {
     res.json({ success: true });
 });
 
+// Interactive CLI Command Execution Endpoint (Web Terminal & Remote CLI)
+app.post('/api/cli/exec', async (req, res) => {
+    const { command, cmd } = req.body;
+    const commandToRun = (command || cmd || '').trim();
+
+    if (!commandToRun) {
+        return res.json({ success: true, output: '', command: '' });
+    }
+
+    try {
+        const result = await cliEngine.execute(commandToRun);
+        res.json({
+            success: result.success,
+            output: result.output,
+            command: commandToRun,
+            isClear: Boolean(result.isClear)
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            output: `Internal CLI error: ${err.message}`,
+            command: commandToRun
+        });
+    }
+});
+
 // Server-Sent Events (SSE) for Real-Time Log Streaming
 app.get('/api/logs/stream', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -457,6 +565,11 @@ app.get('/api/logs/stream', (req, res) => {
         logger.removeListener(listener);
         res.end();
     });
+});
+
+// Missing API endpoint 404 handler (prevents returning HTML to fetch calls)
+app.use('/api', (req, res) => {
+    res.status(404).json({ error: 'API endpoint not found' });
 });
 
 // Fallback index.html for SPA/Web dashboard

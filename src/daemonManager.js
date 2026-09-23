@@ -57,6 +57,23 @@ class DaemonManager {
         }
     }
 
+    reloadConfigFromDisk() {
+        if (!fs.existsSync(CONFIG_PATH)) return null;
+        try {
+            const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+            const parsed = JSON.parse(raw);
+            if (!parsed.servers) parsed.servers = [];
+            logger.info('External config change detected on disk. Hot-reloading daemon schedules...');
+            if (this.status === 'RUNNING' && this.client) {
+                this.initializeSchedules(parsed);
+            }
+            return parsed;
+        } catch (err) {
+            logger.error(`Failed to reload config from disk: ${err.message}`);
+            return null;
+        }
+    }
+
     isOneTimeDueToday(schedule) {
         if (!schedule.runDate) return true;
         const target = new Date(schedule.runDate);

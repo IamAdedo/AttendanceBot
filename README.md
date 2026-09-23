@@ -9,500 +9,301 @@
 ╚══════╝╚══════╝╚══════╝
 ```
 
-> **AttendanceBot by IamAdedo, dlazyHNTR** \
-> *Automatically send attendance messages to Discord servers on schedule. Set it once, let it run in the background forever.*
+> **AttendanceBot v3.0.0 by IamAdedo, dlazyHNTR**  
+> *Automated multi-server Discord daily attendance background daemon with an interactive Web Management Dashboard, drag-and-drop schedule prioritization, real-time check-in telemetry, and a complete CLI suite.*
+
+---
+
+## 📌 Badges & Metadata
+
+- **Current Version:** `v3.0.0`
+- **Dashboard Port:** `http://localhost:3000`
+- **Node.js Requirement:** `18.0.0` or higher
+- **License:** MIT
+- **Supported Platforms:** Windows, macOS, Linux, and Android (Termux — No Root Needed)
 
 ---
 
 ## 🤔 What Does This Do?
 
-**AttendanceBot** automatically sends messages (like "Present" or "Good morning") to Discord channels at times you choose. Perfect for:
+**AttendanceBot** automates daily attendance and scheduled check-ins across multiple Discord servers and channels. It supports sending custom text messages (e.g., `"Present"`, multi-line updates) or reacting with emojis to messages at defined schedules.
 
-- Daily attendance in Work/Study Discord servers
-- Automated check-ins for games or communities
-- Scheduled greetings or reminders
-
-Once set up, it runs invisibly in the background on your computer. You can add multiple servers and multiple schedules for each server.
+You can manage the bot via:
+1. **Interactive Web Dashboard** on `http://localhost:3000` with real-time statistics, drag-and-drop reordering, and one-click manual test runs.
+2. **Terminal CLI & Remote Controller** (`npm run cli` / `node bin/cli.js`) for rapid headless administration.
+3. **Background Daemon** running 24/7 with auto-restart on system boot.
 
 ---
 
 ## ✨ Features
 
-- ✅ **Multiple Servers** — Manage attendance for unlimited Discord servers
-- ✅ **Multiple Schedules** — Set different times for each server (e.g., 9 AM weekdays, 8 PM weekends)
-- ✅ **Flexible Scheduling** — Everyday, weekdays, weekends, a specific repeating weekday (e.g., every Monday), or a **one-time calendar date** that auto-disables after it fires
-- ✅ **Multi-Time / Multi-Day Builder** — Add several times to one day and several days in a single pass
-- ✅ **Multi-Line Messages** — Attendance messages can span multiple lines
-- ✅ **Anti-Detection** — Adds random delays (1-10 minutes) so messages don't post at the exact same second every day
-- ✅ **Message OR Reaction** — Send text messages OR react with emojis to existing messages
-- ✅ **Webhook Alerts** — Get notifications on your phone when attendance posts successfully (or if something goes wrong)
-- ✅ **Background Service** — Runs 24/7 even when you close the terminal or restart your computer — including **no-root Android (Termux)**
-- ✅ **Easy Setup** — Interactive step-by-step wizard—no coding knowledge needed
+- 🌐 **Modern Web Management Dashboard** — Responsive Discord dark/light interface on port 3000 for managing servers, schedules, credentials, and live daemon controls.
+- 🔀 **Drag-and-Drop Schedule Prioritization** *(New in v3)* — Reorder attendance execution sequences with intuitive drag-and-drop rows, priority indicators (`#1`, `#2`...), and up/down controls.
+- ⏱️ **Time Elapsed Since Last Check-in** *(New in v3)* — Live check-in clock badge (`fa-regular fa-clock`) on each server profile row and server header calculating exact elapsed time since the last successful attendance check-in.
+- ▶️ **One-Click 'Test Run' Play Button** *(New in v3)* — Execute immediate manual test runs on any schedule with animated spinner states, instant toast notifications, and live telemetry updates.
+- 💻 **Interactive CLI Suite** — Headless terminal CLI with commands for status, logs, server management, and schedule ordering (`schedule move`, `schedule reorder`).
+- 🏢 **Multi-Server & Multi-Schedule Profiles** — Manage unlimited Discord servers, each with distinct channel targets, frequencies, and payloads.
+- 📅 **Flexible Scheduling Modes** — Everyday, weekdays, weekends, specific repeating weekdays (e.g., every Monday), or a **one-time calendar date** that auto-disables after execution.
+- 💬 **Message OR Reaction Modes** — Dispatch multi-line text messages OR react with custom emojis to channel messages.
+- 🛡️ **Anti-Detection Jitter** — Configurable randomized delay window (1-10+ minutes) to prevent rigid, bot-like repetitive timestamps.
+- 🔔 **Discord Webhook Alerts** — Instant notification embeds dispatched to your personal Discord channel with execution summaries and delivery status.
+- 📊 **30-Day Attendance Analytics** — Interactive visualizations, check-in heatmaps, 30-day success rates, and streak counters.
+- 📜 **Live Activity Logs & CSV Export** — Real-time event streaming with severity filters, search queries, and one-click CSV file export.
+- 💾 **Auto-Save & Configuration Backups** — Automatic profile snapshots and hot JSON configuration export/import with version metadata.
+- 📱 **Android Support (Termux No-Root)** — Native mobile background service with wake lock and Termux:Boot resurrection.
 
 ---
 
-## 📋 What You Need Before Starting
+## 🚀 Quick Start Guide
 
-1. **Node.js** installed on your computer ([Download here](https://nodejs.org/))
-   - Check if you have it: Open Terminal/PowerShell and type `node -v`
-   - You need version 18 or higher
-
-2. **Your Discord User Token** ([How to get it](#-how-to-get-your-discord-token))
-
-3. **Discord Channel ID** where you want to send attendance ([How to get it](#-how-to-get-a-channel-id))
-
----
-
-## 🚀 Installation Guide (Step-by-Step)
-
-### Step 1: Download and Install Dependencies
-
-Open your **Terminal** (Mac/Linux) or **PowerShell** (Windows) and run these commands one by one:
-
-##### Navigate to where you want to save the bot (e.g., Desktop)
+### Step 1: Clone and Install Dependencies
 
 ```bash
-cd Desktop
-```
-
-##### Download the project (or download and extract the ZIP from GitHub)
-
-> 📱 **On Android?** No root required — see [Android (Termux, no root needed)](#android-termux-no-root-needed) for the mobile setup.
-
-```bash
+# Clone the repository
 git clone https://github.com/IamAdedo/attendanceBot.git
-```
 
-##### Enter the project folder
-```bash
+# Enter the project directory
 cd attendanceBot
-```
 
-##### Install required packages (this may take 1-2 minutes)
-```bash
+# Install npm dependencies
 npm install
 ```
 
----
-
-### Step 2: Set Up Your First Server
-
-Now let's configure AttendanceBot! Run this command:
+### Step 2: Launch the Web Dashboard
 
 ```bash
 npm start
+# or: npm run dev
 ```
 
-You'll see a menu like this:
+Open your browser to:
+👉 **`http://localhost:3000`**
 
-```
-██╗     ██████╗ ███████╗
-██║     ╚════██╗██╔════╝
-██║      █████╔╝█████╗
-██║     ██╔═══╝ ██╔══╝
-███████╗███████╗███████╗
-╚══════╝╚══════╝╚══════╝
-
-⚡ AttendanceBot by IamAdedo, dlazyHNTR
-══════════════════════════════════════════════════
-
-  [1] Add New Server Profile
-  [2] View All Configurations
-  [3] Manage / Pause / Delete Server
-  [4] Update Global Webhook URL
-  [5] Exit
-```
-
-**Choose option 1** to add your first server. The wizard will ask you:
-
-1. **Discord User Token**: Paste your token (see below for how to get it)
-2. **Webhook URL** (optional): Skip this for now by pressing Enter
-3. **Profile Name**: Give it a nickname like "Work Server" or "Game Guild"
-4. **Channel ID**: Paste the channel ID where attendance should post
-5. **Schedule**:
-   - Choose **1** for Everyday, **2** for Weekdays only, **3** for Weekends only, or **4** for **Specific day(s)**
-   - **Option 4** lets you pick either:
-     - **(a) A repeating weekday** — e.g. every Monday, by number (`0`–`6`) or name (`Monday`)
-     - **(b) A one-time date** — e.g. `2026-08-10`; it sends once on that day and then disables itself automatically
-   - For a specific day you can add **multiple times to the same day**, and then **add more days** — all in one go
-   - Enter the time (e.g., `09:00 AM` or `21:30`)
-   - Type the message to send. Messages can span **multiple lines** — type each line and press **Enter on an empty line** to finish (leave the first line blank to use the default `Present`)
-   - Set max random delay in minutes (recommended: `10` minutes)
-
-After adding schedules, you'll be asked if you want to add more. Type `n` when you're done.
-
-✅ **Your configuration is now saved!** The wizard creates a file called `config.json` that stores all your settings.
-
-> 💡 When you exit the menu (option **5**), AttendanceBot offers to **install and start the background daemon for you automatically** — so you can skip Step 3 below if you accept.
+From the dashboard you can:
+- Enter your **Discord User Token** securely under **Credentials & Webhook**.
+- Add a **Discord Webhook URL** for real-time mobile push notifications.
+- Create Server Profiles with target **Channel IDs**.
+- Configure, reorder, and test attendance schedules.
+- Start or stop the background daemon with one click.
 
 ---
 
-### Step 3: Start the Background Service
+## 💻 CLI Operations & Headless Management
 
-Now let's make the bot run continuously in the background:
+AttendanceBot includes a CLI engine that can run standalone or communicate with the running server:
 
 ```bash
+# Launch interactive terminal CLI
+npm run cli
+
+# Or execute individual commands directly:
+node bin/cli.js status
+node bin/cli.js list
+node bin/cli.js logs 20
+```
+
+### CLI Command Reference
+
+| Command | Description |
+| :--- | :--- |
+| `status` | Display daemon status, uptime, and configured profile count |
+| `start` / `stop` / `restart` | Control background attendance daemon process |
+| `list` (or `servers`) | List all configured server profiles and their schedules |
+| `server add <name> <chanId> [cron] [msg]` | Create a new server profile |
+| `server pause <id\|name>` | Temporarily pause attendance check-ins for a server |
+| `server resume <id\|name>` | Resume attendance check-ins for a server |
+| `server delete <id\|name>` | Remove a server profile |
+| `server enable-all` / `disable-all` | Bulk toggle all server profiles |
+| `schedule list <srvId>` | List all schedules for a specific server |
+| `schedule add <srvId> <cron> [msg]` | Add a schedule to a server |
+| `schedule delete <srvId> <schedId>` | Remove a schedule from a server |
+| `schedule reorder <srvId> <id1,id2,...>` | *(New in v3)* Reorder execution priority sequence by schedule IDs |
+| `schedule move <srvId> <fromPos> <toPos>` | *(New in v3)* Move a schedule from one priority position to another |
+| `trigger <serverId> [scheduleId]` | Manually trigger an immediate test run |
+| `logs [count]` | Display recent activity logs (default: 15) |
+| `token [new_token]` | View or update Discord account user authorization token |
+| `webhook [url]` | View or update global Discord notification webhook |
+| `webhook test [url]` | Dispatch a test embed notification to verify webhook |
+| `backup` | Export current configuration JSON snapshot |
+| `uptime` | View daemon uptime and execution reliability metrics |
+
+---
+
+## 🔀 Drag-and-Drop Schedule Prioritization & Test Runs
+
+### Drag-and-Drop Execution Sequencing
+1. Navigate to **Server Profiles** in the Web Dashboard.
+2. In the schedules table for any server, grab the **Priority handle** (`:::`) on any row.
+3. Drag the schedule row up or down to set its sequence order.
+4. Release the row — the priority badges (`#1`, `#2`...) update immediately and the order is persisted to the backend via `/api/servers/:serverId/schedules/reorder`.
+5. You can also use the inline up/down chevron buttons or the CLI `schedule move` command.
+
+### Time Elapsed Since Last Check-in
+- Each server card displays an elapsed time counter badge with a clock icon (`fa-regular fa-clock`) right beside the Channel ID.
+- Shows the duration since the latest successful check-in (e.g., `< 1m ago`, `2h 15m ago`).
+- Synchronized with the server header uptime badge in real time.
+
+### Immediate 'Test Run' Play Button
+- Click the emerald **Test Run** play button (`▶`) on any schedule row.
+- The button activates an immediate spinner state (`Running...`), executes the attendance routine, logs the outcome, registers the entry in attendance history, and refreshes the elapsed check-in clock without reloading the page.
+
+---
+
+## 🔄 24/7 Background Service Installation
+
+To run AttendanceBot as a background service that persists across terminal closures and system reboots:
+
+```bash
+# Install and start PM2 background service
 npm run service:install
-```
 
-You'll see:
-
-```
-✅ Background Daemon "attendanceBot-daemon" installed and running!
-📌 Commands:
-  - Status : npm run service:status
-  - Logs   : npm run service:logs
-  - Stop   : npm run service:uninstall
-```
-
-**That's it!** AttendanceBot is now running in the background. You can close the terminal—it will keep running.
-
----
-
-## 🔑 How to Get Your Discord Token
-
-> ⚠️ **IMPORTANT**: Your token is like a password to your Discord account. NEVER share it with anyone. If someone gets your token, they can control your Discord account.
-
-### Desktop App or Browser (Works on both):
-
-1. Open Discord
-2. Press **F12** (or `Ctrl + Shift + I` on Windows, `Cmd + Option + I` on Mac)
-3. Click the **Console** tab at the top
-4. Copy and paste this code, then press **Enter**:
-
-![script image](img)
-
-<!--
-```javascript
-let m;
-webpackChunkdiscord_app.push([
-    [Math.random()],
-    {},
-    runtime => {
-        for (const id in runtime.c) {
-            const module = runtime.c[id];
-            if (module?.exports?.getToken) {
-                m = module;
-                break;
-            }
-        }
-    }
-]);
-
-
-if (m) {
-    console.log("Token:", m.exports.getToken());
-} else {
-    console.warn("token not found")
-}
-```
--->
-
-
-5. Your token will appear in the console (a long string of letters and numbers)
-6. **Right-click** it and select **Copy**
-7. Close Developer Tools
-
----
-
-## 📍 How to Get a Channel ID
-
-1. Open Discord and go to **User Settings** (gear icon)
-2. Go to **Advanced** (under "APP SETTINGS")
-3. Turn on **Developer Mode**
-4. Go back to Discord, **right-click** any channel, and click **Copy Channel ID**
-
----
-
-## 💻 Managing the Bot
-
-### Check if the Bot is Running
-
-```bash
+# Check service status
 npm run service:status
-```
 
-You'll see:
-
-```
-┌─────┬──────────────────────┬─────────┬─────────┬──────────┐
-│ id  │ name                 │ status  │ uptime  │ memory   │
-├─────┼──────────────────────┼─────────┼─────────┼──────────┤
-│ 0   │ attendanceBot-daemon │ online  │ 2h 15m  │ 45.2 MB  │
-└─────┴──────────────────────┴─────────┴─────────┴──────────┘
-```
-
-### View Live Logs (What's Happening Right Now)
-
-```bash
+# Watch real-time logs
 npm run service:logs
-```
 
-Press **Ctrl + C** to stop watching logs.
-
-### Add More Servers or Edit Schedules
-
-```bash
-npm start
-```
-
-Choose option **1** to add more servers, or option **3** to pause/resume/delete existing ones.
-
-### Stop the Bot Completely
-
-```bash
+# Uninstall/Stop service
 npm run service:uninstall
 ```
 
----
+### Auto-Start on System Boot
 
-## 🔄 Make It Start Automatically When Your Computer Boots
+- **Windows:** Run in PowerShell as Administrator:
+  ```powershell
+  npm install -g pm2-windows-startup
+  pm2-startup install
+  ```
+- **macOS:**
+  ```bash
+  npx pm2 startup launchd
+  ```
+- **Linux:**
+  ```bash
+  npx pm2 startup systemd
+  ```
 
-### Windows
+### Android (Termux — No Root Required)
 
-Open **PowerShell as Administrator** and run:
-
-```powershell
-npm install -g pm2-windows-startup
-pm2-startup install
-```
-
-### macOS
-
-Open **Terminal** and run:
-
-```bash
-npx pm2 startup launchd
-```
-
-Then follow the command it shows you (copy-paste it and press Enter).
-
-### Linux
-
-Open **Terminal** and run:
-
-```bash
-npx pm2 startup systemd
-```
-
-### Android (Termux, **no root needed**)
-
-AttendanceBot now runs natively in Termux without root. Install [Termux](https://f-droid.org/en/packages/com.termux/) (F-Droid version is recommended):
-
-#### 1. Update packages & install Node
-
-```bash
-pkg update && pkg upgrade -y
-pkg install nodejs-lts termux-api -y
-```
-
-#### 2. Install the project (same as Step 1 above)
-
-```bash
-git clone https://github.com/IamAdedo/attendanceBot.git
-cd attendanceBot
-npm install
-```
-
-#### 3. Configure and start
-
-```bash
-npm start
-```
-
-Set up your server (Step 2 above). When you exit, accept the offer to install the daemon — or run:
-
-```bash
-npm run service:install
-```
-
-The installer detects Termux automatically and:
-- Keeps the daemon alive with a **wake lock** (install the [Termux:API](https://f-droid.org/en/packages/com.termux.api/) app for this) so Android doesn't suspend it
-- Creates a **Termux:Boot** startup script so the daemon resurrects after a reboot
-
-#### 4. (Optional) Auto-start after reboot
-
-Install the [Termux:Boot](https://f-droid.org/en/packages/com.termux.boot/) app from F-Droid, open it once, and the daemon will start automatically on device boot — no root required.
-
-> ⚠️ **Older alternative (root emulation):** If you previously used the `proot-distro` + Ubuntu approach below, you can keep using it — but the native Termux path above is simpler and needs no root.
+1. Install **Termux** from F-Droid.
+2. Install Node.js:
+   ```bash
+   pkg update && pkg upgrade -y
+   pkg install nodejs-lts termux-api -y
+   ```
+3. Clone and install AttendanceBot:
+   ```bash
+   git clone https://github.com/IamAdedo/attendanceBot.git
+   cd attendanceBot
+   npm install
+   npm start
+   ```
+4. Background persistence:
+   - Install **Termux:API** app from F-Droid for Android wake locks.
+   - Install **Termux:Boot** app from F-Droid to automatically launch AttendanceBot when your phone boots.
 
 ---
 
-## 🔔 Get Notifications on Your Phone (Optional)
+## 🔑 Obtaining Your Discord Credentials
 
-You can get Discord notifications on your phone whenever attendance posts successfully or if there's an error.
+### Discord User Token
+> ⚠️ **IMPORTANT**: Your token grants access to your Discord account. Never share it with anyone or commit it to a public repository.
 
-### How to Set Up Webhook Notifications:
+1. Open Discord in your desktop browser or app.
+2. Press `F12` (or `Ctrl + Shift + I` on Windows/Linux, `Cmd + Option + I` on Mac).
+3. Switch to the **Console** tab.
+4. Paste the following script and press **Enter**:
+   ```javascript
+   (webpackChunkdiscord_app.push([[''],{},e=>{m=[];for(let c in e.c)m.push(e.c[c])}]),m).find(m=>m?.exports?.default?.getToken!==void 0).exports.default.getToken()
+   ```
+5. Copy the returned token string without quotes.
+6. Paste the token into the AttendanceBot dashboard (**Credentials & Webhook** tab).
 
-1. Open Discord (desktop or browser)
-2. Go to the channel where you want to receive notifications
-3. Click the **gear icon** next to the channel name → **Integrations** → **Webhooks**
-4. Click **New Webhook** → **Copy Webhook URL**
-5. Run `npm start` → Choose **[4] Update Global Webhook URL**
-6. Paste the webhook URL and press Enter
-7. You'll get a test notification immediately!
-
-Now whenever attendance posts, you'll get a notification like this:
-
-```
-✅ Attendance Posted Successfully
-Server Profile : Work Server
-Channel        : #daily-checkin
-Schedule       : 09:00 AM (Weekdays)
-Message Sent   : "Present"
-Timestamp      : Tuesday, August 5, 2026 9:07 AM
-
-AttendanceBot by IamAdedo, dlazyHNTR
-```
+### Discord Channel ID
+1. In Discord, navigate to **User Settings** (gear icon) → **Advanced** (under App Settings).
+2. Toggle on **Developer Mode**.
+3. Right-click the channel where attendance should post and click **Copy Channel ID**.
 
 ---
 
-## 📁 Project Files Explained
+## 📝 Changelog
 
-```
-attendanceBot/
-├── bin/
-│   ├── cli.js               ← The interactive menu you see when you run npm start
-│   ├── install-service.js   ← Installs the background service
-│   └── uninstall-service.js ← Removes the background service
-├── src/
-│   ├── bot.js               ← Main bot that connects to Discord
-│   ├── logger.js            ← Handles log messages
-│   └── engine/
-│       └── worker.js        ← Sends messages and reactions
-├── config.json              ← YOUR SETTINGS (created after first setup)
-├── package.json             ← Project info and dependencies
-└── README.md                ← This file!
-```
-
-**Important:** `config.json` contains your Discord token. Never share this file or commit it to GitHub!
-
----
-
-## ⚠️ Important Warnings
-
-### 1. Discord's Rules
-
-Using "self-bots" (bots that control your personal Discord account) **violates Discord's Terms of Service**. While many people use them without issues, Discord *can* ban your account if they detect it.
-
-**How to stay safer:**
-- ✅ Always keep "Anti-Detection Jitter" enabled (10+ minutes recommended)
-- ✅ Don't use this bot on your main Discord account
-- ✅ Use it sparingly (1-2 messages per day max)
-- ❌ Never post in rapid succession or across many servers
-
-### 2. Keep Your Token Secret
-
-Your Discord token is like your password. If someone gets it, they can:
-- Read all your messages
-- Send messages as you
-- Join/leave servers
-- Change your settings
-
-**Never:**
-- Share your token with anyone
-- Post it online
-- Commit `config.json` to GitHub
-
-### 3. This is For Personal/Educational Use Only
-
-Use this responsibly. Don't spam, don't harass, and respect the communities you're in.
+### Version 3.0.0 (Current Version)
+- **🔀 Drag-and-Drop Schedule Prioritization:**
+  - Added HTML5 drag-and-drop table rows allowing users to reorder attendance schedules visually.
+  - Added execution sequence tags (`#1`, `#2`, ...) and up/down priority adjusters.
+  - Implemented backend endpoint `POST /api/servers/:serverId/schedules/reorder` with automatic config persistence and live schedule reinitialization.
+- **⏱️ Real-Time Elapsed Check-in Clock:**
+  - Added dedicated elapsed time clock badge (`fa-regular fa-clock`) on each server profile row and server header.
+  - Formats duration since the last successful check-in dynamically (e.g. `< 1m ago`, `2h 15m ago`).
+- **▶️ Immediate 'Test Run' Play Button:**
+  - Added emerald one-click play button on every schedule row.
+  - Interactive spinner loading state (`Running...`) and instant toast feedback.
+  - Automatically records check-ins in the attendance history and updates elapsed check-in timers in real time without refreshing.
+- **💻 CLI Enhancements:**
+  - Added `schedule reorder <serverId> <id1,id2,...>` to terminal CLI engine.
+  - Added `schedule move <serverId> <fromPosition> <toPosition>` to easily change schedule priority by index.
+- **🔄 Semantic Version Synchronization:**
+  - Full version synchronization across `package.json`, REST API exports, client headers, footers, and documentation.
+  - Enforced version bump policy: minor bumps (e.g. `3.0` to `3.1`) for incremental enhancements, major bumps (`3` to `4`) for architectural updates.
 
 ---
 
-## ❓ Troubleshooting
-
-### "npm: command not found"
-
-You need to install Node.js first: https://nodejs.org/
-
-### "Failed to log into Discord: Unauthorized"
-
-Your Discord token is wrong or expired. Get a fresh token using the steps above.
-
-### "Channel not found" or "Missing Permissions"
-
-Make sure:
-1. The Channel ID is correct
-2. Your Discord account has permission to send messages in that channel
-3. The channel still exists
-
-### Bot stops working after a few days
-
-Check logs with `npm run service:logs`. Common causes:
-- Discord token expired (get a new one)
-- Channel was deleted
-- You got rate-limited (reduce frequency or increase jitter)
-
-### How do I update the bot?
-
-```bash
-cd attendanceBot
-git pull
-npm install
-npm run service:uninstall
-npm run service:install
-```
+### Version 2.0.0 & 2.1.0
+- **🌐 Web Management Dashboard & REST API:**
+  - Built Express full-stack architecture running on port 3000 (`server.js`, `public/index.html`, `public/app.js`).
+  - Implemented Discord dark and light themes with responsive navigation.
+  - Added live daemon process management (Start, Stop, Restart) directly from the browser.
+- **👍 Reaction-Based Attendance:**
+  - Added support for emoji reactions (`REACTION` mode) alongside standard text messages (`MESSAGE` mode).
+  - Configurable target message ID or automatic fallback to the latest message in the channel.
+- **📊 30-Day Attendance Analytics:**
+  - Added 30-day historical tracking with interactive Recharts visualizations.
+  - Heatmap daily breakdown, peak usage calculation, and streak tracking.
+- **📜 Live Activity Logs & CSV Export:**
+  - Real-time in-browser log streaming with level filters (INFO, SUCCESS, WARN, ERROR) and search filter.
+  - One-click export of activity history as CSV spreadsheet.
+- **💾 Automated Backups & Export/Import:**
+  - Added JSON configuration export and hot import.
+  - Local auto-save and automated configuration backup mechanisms.
+- **⚠️ Conflict Detection:**
+  - Real-time detection of overlapping schedules running within 5 minutes of each other on the same channel.
 
 ---
 
-## 🛠️ Advanced: Reaction-Based Attendance
-
-Some servers require you to react with an emoji instead of sending a message.
-
-When setting up a schedule, you can:
-1. Set `attendanceType` to `REACTION` in `config.json`
-2. Add `"emoji": "👍"` (or any emoji)
-3. Optionally add `"targetMessageId": "1234567890"` to react to a specific message
-
-Example in `config.json`:
-
-```json
-{
-  "id": "1234567891",
-  "label": "09:00 AM (Weekdays)",
-  "cron": "0 9 * * 1-5",
-  "attendanceType": "REACTION",
-  "emoji": "✅",
-  "targetMessageId": "1234567890123456789",
-  "maxJitterMinutes": 10,
-  "active": true
-}
-```
-
-If `targetMessageId` is not provided, the bot will react to the most recent message in the channel.
+### Version 1.0.0
+- **⚡ Initial CLI & Background Daemon:**
+  - Interactive command-line setup wizard (`bin/cli.js`).
+  - PM2 background daemon management (`npm run service:install` / `npm run service:uninstall`).
+  - Automated cron scheduling for Discord channel messages.
+  - Multi-server profile storage in `config.json`.
+  - Multi-line attendance messages.
+  - Anti-detection random delay (jitter) window.
+  - Discord webhook dispatch for attendance success and error notifications.
+  - Native Android support via Termux (no root required) with wake lock and boot scripts.
 
 ---
 
-## 📞 Support & Contact
+## 📌 Versioning Policy
 
-**Created by:** IamAdedo, dlazyHNTR
-
-For bugs, suggestions, or questions, open an issue on GitHub.
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License** — you're free to use, modify, and distribute it.
-
-**Use at your own risk.** The authors are not responsible for Discord account bans or any consequences of using this tool.
+AttendanceBot adheres to semantic versioning guidelines:
+- **Patch / Minor Bump (`3.0` → `3.1`):** Applied for small improvements, UI enhancements, optimizations, and bug fixes.
+- **Major Bump (`3.0` → `4.0`):** Applied for major feature additions, breaking API changes, or significant architectural updates.
 
 ---
 
-## 🎉 You're All Set!
+## ⚠️ Important Guidelines & Disclaimer
 
-AttendanceBot is now running in the background. It will automatically send your attendance messages at the times you configured.
+1. **Discord Terms of Service:** Automated user accounts ("self-bots") violate Discord's Terms of Service. Always enable the anti-detection jitter delay, avoid spamming, and consider using dedicated accounts.
+2. **Token Security:** Your Discord token provides full access to your account. Never commit `config.json` to GitHub or disclose your token to anyone.
+3. **Personal & Educational Use:** This software is provided for personal workflow automation and educational purposes. Use responsibly.
 
-**Quick command reference:**
-```bash
-npm start                     # Open the menu to add/edit servers
-npm run service:status        # Check if bot is running
-npm run service:logs          # See what the bot is doing
-npm run service:uninstall     # Stop the bot
-```
+---
 
-Enjoy your automated attendance! 🚀
+## 📞 Support & Community
 
+- **Authors:** IamAdedo, dlazyHNTR
+- **License:** MIT License
+- **Issues & Contributions:** Contributions and bug reports are welcome via GitHub Issues.
 
-...with love by The !Lazy Hunter <||>
+*...with love by The !Lazy Hunter <||>*

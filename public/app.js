@@ -46,13 +46,27 @@ function switchTab(tabId) {
     if (activeSec) {
         activeSec.classList.remove('hidden');
     }
+
+    if (tabId === 'cli') {
+        setTimeout(() => {
+            const input = document.getElementById('cliTerminalInput');
+            if (input) input.focus();
+        }, 100);
+    }
 }
 
 // --- API INTERACTIONS ---
-async function fetchConfig() {
+let consecutiveStatusFailures = 0;
+let consecutiveConfigFailures = 0;
+
+async function fetchConfig(isRetry = false) {
     try {
         const res = await fetch('/api/config');
-        if (!res.ok) return;
+        if (!res.ok) {
+            consecutiveConfigFailures++;
+            return;
+        }
+        consecutiveConfigFailures = 0;
         currentConfig = await res.json();
 
         // Populate credentials inputs
@@ -71,14 +85,22 @@ async function fetchConfig() {
             performAutoBackup(true);
         }
     } catch (err) {
-        console.error('Error fetching config:', err);
+        consecutiveConfigFailures++;
+        console.warn('AttendanceBot config temporarily unavailable (retrying):', err && err.message ? err.message : err);
+        if (!isRetry && consecutiveConfigFailures <= 3) {
+            setTimeout(() => fetchConfig(true), 1500);
+        }
     }
 }
 
-async function fetchStatus() {
+async function fetchStatus(isRetry = false) {
     try {
         const res = await fetch('/api/status');
-        if (!res.ok) return;
+        if (!res.ok) {
+            consecutiveStatusFailures++;
+            return;
+        }
+        consecutiveStatusFailures = 0;
         currentStatus = await res.json();
         updateDaemonStatusUI();
         updateStats();
@@ -93,7 +115,12 @@ async function fetchStatus() {
             updateCheckinChart(currentStatus.dailyStats);
         }
     } catch (err) {
-        console.error('Error fetching status:', err);
+        consecutiveStatusFailures++;
+        // Transient network blip, container proxy delay, or server restart
+        console.warn('AttendanceBot status temporarily unavailable (retrying):', err && err.message ? err.message : err);
+        if (!isRetry && consecutiveStatusFailures <= 3) {
+            setTimeout(() => fetchStatus(true), 1500);
+        }
     }
 }
 
@@ -297,7 +324,7 @@ async function fetchDailyCheckinStats() {
         const statsData = await res.json();
         updateCheckinChart(statsData);
     } catch (err) {
-        console.error('Error fetching 30-day check-in stats:', err);
+        console.warn('AttendanceBot daily stats temporarily unavailable:', err && err.message ? err.message : err);
     } finally {
         if (refreshIcon) refreshIcon.classList.remove('fa-spin');
     }
@@ -480,7 +507,7 @@ function renderRechartsCheckins(dailyData) {
             rechartsRoot.render(chartComponent);
         }
     } catch (err) {
-        console.error('Error mounting Recharts element:', err);
+        console.warn('Notice mounting Recharts element:', err && err.message ? err.message : err);
     }
 }
 
@@ -678,7 +705,7 @@ function downloadConfigBackupJson() {
 
     const exportData = {
         app: 'AttendanceBot',
-        version: '2.1.0',
+        version: '3.0.0',
         exportedAt: new Date().toISOString(),
         serverCount: (currentConfig.servers || []).length,
         scheduleCount: totalSchedules,
@@ -817,7 +844,7 @@ async function toggleDesktopNotifications() {
                 showNotificationToast('Notification permission was not granted.', 'warning');
             }
         } catch (err) {
-            console.error('Error requesting notification permission:', err);
+            console.warn('Notice requesting notification permission:', err && err.message ? err.message : err);
         }
     } else if (Notification.permission === 'granted') {
         desktopNotificationsEnabled = !desktopNotificationsEnabled;
@@ -1441,7 +1468,7 @@ function exportConfigJSON() {
 
     const exportData = {
         app: 'AttendanceBot',
-        version: '2.1.0',
+        version: '3.0.0',
         exportedAt: new Date().toISOString(),
         globalWebhookUrl: currentConfig.globalWebhookUrl || '',
         servers: servers
@@ -1607,6 +1634,126 @@ function formatUptimeDuration(timestamp) {
     return remHours > 0 ? `${diffDays}d ${remHours}h ago` : `${diffDays}d ago`;
 }
 
+// --- DRAG-AND-DROP SCHEDULE REORDERING ---
+let draggedScheduleState = null;
+
+function onScheduleDragStart(e, serverId, index) {
+    draggedScheduleState = { serverId: String(serverId), index: Number(index) };
+    e.dataTransfer.effectAllowed = 'move';
+    try {
+        e.dataTransfer.setData('text/plain', JSON.stringify(draggedScheduleState));
+    } catch (err) {}
+    const tr = e.currentTarget;
+    if (tr) {
+        tr.classList.add('opacity-40', 'bg-indigo-500/10');
+    }
+}
+
+function onScheduleDragOver(e, serverId, index) {
+    if (!draggedScheduleState || draggedScheduleState.serverId !== String(serverId)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const tr = e.currentTarget;
+    if (tr && !tr.classList.contains('border-t-2') && draggedScheduleState.index !== Number(index)) {
+        tr.classList.add('border-t-2', 'border-discord-blurple', 'bg-discord-blurple/10');
+    }
+}
+
+function onScheduleDragEnter(e, serverId, index) {
+    if (!draggedScheduleState || draggedScheduleState.serverId !== String(serverId)) return;
+    e.preventDefault();
+}
+
+function onScheduleDragLeave(e) {
+    const tr = e.currentTarget;
+    if (tr) {
+        tr.classList.remove('border-t-2', 'border-discord-blurple', 'bg-discord-blurple/10');
+    }
+}
+
+async function onScheduleDrop(e, targetServerId, targetIndex) {
+    e.preventDefault();
+    const tr = e.currentTarget;
+    if (tr) {
+        tr.classList.remove('border-t-2', 'border-discord-blurple', 'bg-discord-blurple/10');
+    }
+
+    let sourceServerId = draggedScheduleState ? draggedScheduleState.serverId : null;
+    let sourceIndex = draggedScheduleState ? draggedScheduleState.index : -1;
+
+    try {
+        const raw = e.dataTransfer.getData('text/plain');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            sourceServerId = String(parsed.serverId);
+            sourceIndex = Number(parsed.index);
+        }
+    } catch (err) {}
+
+    targetServerId = String(targetServerId);
+    targetIndex = Number(targetIndex);
+
+    if (!sourceServerId || sourceServerId !== targetServerId || sourceIndex === targetIndex || sourceIndex < 0) {
+        return;
+    }
+
+    await reorderSchedules(targetServerId, sourceIndex, targetIndex);
+}
+
+function onScheduleDragEnd(e) {
+    draggedScheduleState = null;
+    document.querySelectorAll('.schedule-drag-row').forEach(row => {
+        row.classList.remove('opacity-40', 'bg-indigo-500/10', 'border-t-2', 'border-discord-blurple', 'bg-discord-blurple/10');
+    });
+}
+
+async function moveSchedulePriority(serverId, currentIndex, direction) {
+    const targetIndex = Number(currentIndex) + Number(direction);
+    const server = (currentConfig.servers || []).find(s => String(s.id) === String(serverId));
+    if (!server || !server.schedules || targetIndex < 0 || targetIndex >= server.schedules.length) {
+        return;
+    }
+    await reorderSchedules(serverId, currentIndex, targetIndex);
+}
+
+async function reorderSchedules(serverId, fromIndex, toIndex) {
+    const server = (currentConfig.servers || []).find(s => String(s.id) === String(serverId));
+    if (!server || !server.schedules) return;
+
+    const [moved] = server.schedules.splice(fromIndex, 1);
+    server.schedules.splice(toIndex, 0, moved);
+
+    // Optimistically re-render to update execution sequence tags immediately
+    renderServers();
+
+    try {
+        const scheduleIds = server.schedules.map(s => s.id);
+        const res = await fetch(`/api/servers/${serverId}/schedules/reorder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scheduleIds })
+        });
+
+        if (res.ok) {
+            showNotificationToast(`Priority updated: "${moved.label}" moved to #${toIndex + 1}`, 'success');
+            if (typeof performAutoBackup === 'function') {
+                performAutoBackup(true);
+            }
+        } else {
+            // Fallback to saving whole config
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ servers: currentConfig.servers })
+            });
+            showNotificationToast(`Priority updated (#${toIndex + 1})`, 'success');
+        }
+    } catch (err) {
+        console.warn('Notice reordering schedules:', err);
+        showNotificationToast('Reordered schedules locally', 'info');
+    }
+}
+
 // --- RENDER SERVER PROFILES ---
 function renderServers() {
     const container = document.getElementById('serverListContainer');
@@ -1744,30 +1891,30 @@ function renderServers() {
             `;
         }
 
-        // Server Uptime calculation - tracking time elapsed since last successful check-in
+        // Server Uptime & Last Successful Check-in calculation
         const lastSuccessTimestamp = serverHealth ? serverHealth.lastSuccessfulAt : null;
+        const lastSuccessElapsed = lastSuccessTimestamp ? formatUptimeDuration(lastSuccessTimestamp) : null;
         let uptimeBadge = '';
         if (!server.active) {
             uptimeBadge = `
                 <span class="text-xs px-2.5 py-0.5 rounded-full font-medium bg-zinc-700/25 text-zinc-400 border border-zinc-600/30 inline-flex items-center gap-1.5" title="Server monitoring is paused">
                     <i class="fa-solid fa-pause text-[10px]"></i>
-                    <span>Uptime: Paused</span>
+                    <span>Paused</span>
                 </span>
             `;
         } else if (lastSuccessTimestamp) {
-            const timeAgo = formatUptimeDuration(lastSuccessTimestamp);
             const dateFormatted = new Date(lastSuccessTimestamp).toLocaleString();
             uptimeBadge = `
-                <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1.5 shadow-xs" title="Server Uptime: Last successful attendance check-in was ${timeAgo} (${dateFormatted})">
-                    <i class="fa-solid fa-clock-rotate-left text-emerald-400 text-[10px]"></i>
-                    <span>Up: ${timeAgo}</span>
+                <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1.5 shadow-xs" title="Last successful attendance check-in: ${lastSuccessElapsed} (${dateFormatted})">
+                    <i class="fa-regular fa-clock text-emerald-400 text-xs"></i>
+                    <span>Check-in: ${lastSuccessElapsed}</span>
                 </span>
             `;
         } else {
             uptimeBadge = `
                 <span class="text-xs px-2.5 py-0.5 rounded-full font-medium bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 inline-flex items-center gap-1.5" title="Server Uptime: Waiting for first scheduled attendance check-in">
-                    <i class="fa-regular fa-clock text-[10px]"></i>
-                    <span>Uptime: New</span>
+                    <i class="fa-regular fa-clock text-indigo-400 text-xs"></i>
+                    <span>No check-ins yet</span>
                 </span>
             `;
         }
@@ -1807,8 +1954,13 @@ function renderServers() {
                                 </span>
                             ` : ''}
                         </div>
-                        <div class="flex flex-wrap items-center space-x-3 text-xs text-discord-muted mt-0.5 mono">
+                        <!-- Server Profile List Row Metadata with Elapsed Check-in Clock -->
+                        <div class="flex flex-wrap items-center gap-2.5 text-xs text-discord-muted mt-1 mono">
                             <span>Channel ID: ${escapeHtml(server.channelId)}</span>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-discord-card border border-discord-border text-discord-text text-[11px] font-sans" title="Time elapsed since last successful attendance check-in for this server">
+                                <i class="fa-regular fa-clock ${lastSuccessTimestamp ? 'text-emerald-400' : 'text-discord-muted'} text-[11px]"></i>
+                                <span>Last success: <strong class="${lastSuccessTimestamp ? 'text-emerald-400' : 'text-discord-muted'}">${lastSuccessElapsed || 'Never'}</strong></span>
+                            </span>
                             ${serverHealth && serverHealth.lastRunAt ? `
                                 <span class="${health === 'FAILED' ? 'text-rose-300' : 'text-emerald-400/90'}">
                                     • Last Run: ${new Date(serverHealth.lastRunAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (${escapeHtml(serverHealth.lastRunStatus || 'OK')})
@@ -1890,7 +2042,7 @@ function renderServers() {
                 </div>
             ` : ''}
 
-            <!-- Schedules Table / List -->
+            <!-- Schedules Table / List with Drag-and-Drop Reordering -->
             <div class="p-4 sm:p-5">
                 ${!server.schedules || server.schedules.length === 0 ? `
                     <p class="text-xs text-discord-muted italic">No schedules defined for this server yet. Click "Add Schedule" to configure daily times.</p>
@@ -1899,6 +2051,7 @@ function renderServers() {
                         <table class="w-full text-left text-xs">
                             <thead>
                                 <tr class="text-discord-muted uppercase tracking-wider border-b border-discord-border/40 pb-2">
+                                    <th class="pb-2 font-semibold w-16 text-center" title="Execution Sequence Priority (Drag & drop rows to reorder)">Priority</th>
                                     <th class="pb-2 font-semibold">Schedule Label</th>
                                     <th class="pb-2 font-semibold">Frequency (Cron)</th>
                                     <th class="pb-2 font-semibold">Type & Payload</th>
@@ -1907,11 +2060,46 @@ function renderServers() {
                                     <th class="pb-2 font-semibold text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-discord-border/30">
-                                ${server.schedules.map(sched => {
+                            <tbody class="divide-y divide-discord-border/30" id="schedules-tbody-${server.id}">
+                                ${server.schedules.map((sched, schedIndex) => {
                                     const isConflicting = conflictingScheduleIds.has(String(sched.id));
                                     return `
-                                    <tr class="hover:bg-discord-card/20 transition ${isConflicting ? 'bg-amber-500/5' : ''}">
+                                    <tr
+                                        id="sched-row-${server.id}-${sched.id}"
+                                        class="schedule-drag-row hover:bg-discord-card/30 transition select-none group ${isConflicting ? 'bg-amber-500/5' : ''}"
+                                        draggable="true"
+                                        ondragstart="onScheduleDragStart(event, '${server.id}', ${schedIndex})"
+                                        ondragover="onScheduleDragOver(event, '${server.id}', ${schedIndex})"
+                                        ondragenter="onScheduleDragEnter(event, '${server.id}', ${schedIndex})"
+                                        ondragleave="onScheduleDragLeave(event)"
+                                        ondrop="onScheduleDrop(event, '${server.id}', ${schedIndex})"
+                                        ondragend="onScheduleDragEnd(event)"
+                                        data-server-id="${server.id}"
+                                        data-schedule-id="${sched.id}"
+                                        data-index="${schedIndex}"
+                                    >
+                                        <td class="py-2.5 text-center whitespace-nowrap">
+                                            <div class="inline-flex items-center gap-1.5 justify-center">
+                                                <span class="cursor-grab active:cursor-grabbing text-discord-muted hover:text-white p-1 rounded hover:bg-discord-card transition inline-flex items-center" title="Drag & drop to reorder execution sequence priority">
+                                                    <i class="fa-solid fa-grip-vertical text-xs group-hover:text-indigo-300"></i>
+                                                </span>
+                                                <span class="text-[10px] mono font-bold px-1.5 py-0.5 rounded bg-discord-card border border-discord-border text-discord-muted group-hover:text-white" title="Execution Sequence Priority #${schedIndex + 1}">
+                                                    #${schedIndex + 1}
+                                                </span>
+                                                <div class="inline-flex flex-col ml-0.5 opacity-30 group-hover:opacity-100 transition">
+                                                    ${schedIndex > 0 ? `
+                                                        <button onclick="moveSchedulePriority('${server.id}', ${schedIndex}, -1); event.stopPropagation();" title="Move Up (Higher Priority)" class="text-[9px] text-discord-muted hover:text-white leading-none p-0.5 cursor-pointer">
+                                                            <i class="fa-solid fa-chevron-up"></i>
+                                                        </button>
+                                                    ` : ''}
+                                                    ${schedIndex < server.schedules.length - 1 ? `
+                                                        <button onclick="moveSchedulePriority('${server.id}', ${schedIndex}, 1); event.stopPropagation();" title="Move Down (Lower Priority)" class="text-[9px] text-discord-muted hover:text-white leading-none p-0.5 cursor-pointer">
+                                                            <i class="fa-solid fa-chevron-down"></i>
+                                                        </button>
+                                                    ` : ''}
+                                                </div>
+                                            </div>
+                                        </td>
                                         <td class="py-2.5 font-medium text-white">
                                             <div class="flex items-center flex-wrap gap-1.5">
                                                 <span>${escapeHtml(sched.label)}</span>
@@ -1942,8 +2130,15 @@ function renderServers() {
                                             </button>
                                         </td>
                                         <td class="py-2.5 text-right space-x-1.5 whitespace-nowrap">
-                                            <button onclick="triggerScheduleNow('${server.id}', '${sched.id}')" title="Test Trigger Immediately" class="px-2.5 py-1 rounded bg-discord-card hover:bg-discord-blurple hover:text-white text-discord-muted border border-discord-border transition cursor-pointer">
-                                                <i class="fa-solid fa-bolt mr-1 text-amber-400"></i> Test Run
+                                            <!-- Test Run Play Button -->
+                                            <button
+                                                id="btn-test-run-${server.id}-${sched.id}"
+                                                onclick="triggerScheduleNow('${server.id}', '${sched.id}', this)"
+                                                title="Test Run: Execute immediate one-time manual execution of this schedule"
+                                                class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 hover:border-emerald-500 text-xs font-semibold shadow-xs transition duration-150 cursor-pointer active:scale-95"
+                                            >
+                                                <i class="fa-solid fa-play text-[9px] text-emerald-400"></i>
+                                                <span>Test Run</span>
                                             </button>
                                             <button onclick="openEditScheduleModal('${server.id}', '${sched.id}')" title="Edit Schedule" class="p-1.5 rounded bg-discord-card hover:bg-discord-border text-discord-muted hover:text-white transition cursor-pointer">
                                                 <i class="fa-solid fa-pencil"></i>
@@ -2334,8 +2529,15 @@ async function deleteSchedule(serverId, scheduleId) {
     }
 }
 
-async function triggerScheduleNow(serverId, scheduleId) {
-    switchTab('logs');
+async function triggerScheduleNow(serverId, scheduleId, btnElement) {
+    let originalHtml = '';
+    if (btnElement) {
+        originalHtml = btnElement.innerHTML;
+        btnElement.disabled = true;
+        btnElement.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-[9px] text-amber-300"></i> <span>Running...</span>';
+        btnElement.classList.add('opacity-75');
+    }
+
     try {
         const res = await fetch(`/api/servers/${serverId}/schedules/${scheduleId}/trigger`, {
             method: 'POST',
@@ -2348,14 +2550,44 @@ async function triggerScheduleNow(serverId, scheduleId) {
                 title: '⚡ Attendance Task Executed',
                 body: data.message || 'Attendance schedule triggered successfully.'
             });
-            showNotificationToast(data.message || 'Task executed successfully!', 'success');
+            showNotificationToast(data.message || 'Manual execution completed! Check-in recorded.', 'success');
+
+            if (btnElement) {
+                btnElement.innerHTML = '<i class="fa-solid fa-check text-[9px] text-emerald-300"></i> <span>Executed!</span>';
+                btnElement.classList.remove('bg-emerald-500/15', 'text-emerald-300');
+                btnElement.classList.add('bg-emerald-600', 'text-white');
+            }
+
+            // Immediately refresh status and stats so the elapsed check-in clock and uptime update in real time
             await fetchStatus();
             await fetchDailyCheckinStats();
+
+            setTimeout(() => {
+                if (btnElement) {
+                    btnElement.innerHTML = originalHtml;
+                    btnElement.disabled = false;
+                    btnElement.classList.remove('opacity-75', 'bg-emerald-600', 'text-white');
+                    btnElement.classList.add('bg-emerald-500/15', 'text-emerald-300');
+                }
+            }, 1800);
         } else {
-            alert(`Trigger failed: ${data.error || 'Check activity log'}`);
+            showNotificationToast(`Test run failed: ${data.error || 'Check activity log'}`, 'warning');
+            if (btnElement) {
+                btnElement.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-[9px] text-rose-300"></i> <span>Failed</span>';
+                setTimeout(() => {
+                    btnElement.innerHTML = originalHtml;
+                    btnElement.disabled = false;
+                    btnElement.classList.remove('opacity-75');
+                }, 2000);
+            }
         }
     } catch (err) {
-        alert(`Failed to trigger: ${err.message}`);
+        showNotificationToast(`Failed to trigger: ${err.message}`, 'error');
+        if (btnElement) {
+            btnElement.innerHTML = originalHtml;
+            btnElement.disabled = false;
+            btnElement.classList.remove('opacity-75');
+        }
     }
 }
 
@@ -2623,7 +2855,8 @@ async function clearLogs() {
         renderFilteredLogs();
         showNotificationToast('Session activity logs cleared.', 'info');
     } catch (err) {
-        console.error('Failed to clear logs:', err);
+        console.warn('Failed to clear logs on server:', err && err.message ? err.message : err);
+        showNotificationToast('Unable to clear server logs at this time', 'warning');
     }
 }
 
@@ -2701,3 +2934,165 @@ function escapeHtml(str) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+
+// --- INTERACTIVE CLI TERMINAL ENGINE ---
+let cliCommandHistory = [];
+let cliHistoryIndex = -1;
+
+function initCliTerminalShortcuts() {
+    const input = document.getElementById('cliTerminalInput');
+    if (!input) return;
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (cliCommandHistory.length === 0) return;
+            if (cliHistoryIndex === -1) {
+                cliHistoryIndex = cliCommandHistory.length - 1;
+            } else if (cliHistoryIndex > 0) {
+                cliHistoryIndex--;
+            }
+            input.value = cliCommandHistory[cliHistoryIndex] || '';
+            input.selectionStart = input.selectionEnd = input.value.length;
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (cliHistoryIndex === -1) return;
+            if (cliHistoryIndex < cliCommandHistory.length - 1) {
+                cliHistoryIndex++;
+                input.value = cliCommandHistory[cliHistoryIndex] || '';
+            } else {
+                cliHistoryIndex = -1;
+                input.value = '';
+            }
+            input.selectionStart = input.selectionEnd = input.value.length;
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initCliTerminalShortcuts();
+});
+
+async function handleCliTerminalSubmit(e) {
+    if (e) e.preventDefault();
+    const input = document.getElementById('cliTerminalInput');
+    if (!input) return;
+    const cmd = input.value.trim();
+    if (!cmd) return;
+
+    // Push to history
+    cliCommandHistory.push(cmd);
+    cliHistoryIndex = -1;
+    input.value = '';
+
+    await executeCliCommand(cmd);
+}
+
+async function runCliChip(cmd) {
+    switchTab('cli');
+    const input = document.getElementById('cliTerminalInput');
+    if (input) {
+        input.value = cmd;
+    }
+    cliCommandHistory.push(cmd);
+    cliHistoryIndex = -1;
+    await executeCliCommand(cmd);
+}
+
+async function executeCliCommand(commandLine) {
+    const terminalOutput = document.getElementById('cliTerminalOutput');
+    const submitBtn = document.getElementById('cliSubmitBtn');
+
+    if (!terminalOutput) return;
+
+    // Render User Command Prompt
+    const cmdEl = document.createElement('div');
+    cmdEl.className = 'mt-2 pt-1 border-t border-zinc-800/80 flex items-start gap-1.5';
+    cmdEl.innerHTML = `
+        <span class="text-emerald-400 font-bold select-none">attendancebot:~$</span>
+        <span class="text-white font-semibold">${escapeHtml(commandLine)}</span>
+    `;
+    terminalOutput.appendChild(cmdEl);
+
+    // Disable button temporarily
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+    }
+
+    try {
+        const res = await fetch('/api/cli/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ command: commandLine })
+        });
+
+        const data = await res.json();
+
+        if (data.isClear) {
+            terminalOutput.innerHTML = `
+                <div class="text-emerald-400 font-bold">⚡ Terminal Cleared</div>
+                <div class="text-zinc-500 text-[11px] pb-2 border-b border-zinc-800">Connected to live spinning server. Type <span class="text-discord-blurple font-bold">help</span> for commands.</div>
+            `;
+        } else {
+            const outEl = document.createElement('div');
+            outEl.className = data.success ? 'text-zinc-300 whitespace-pre-wrap' : 'text-rose-400 whitespace-pre-wrap';
+            outEl.textContent = data.output || '(No output)';
+            terminalOutput.appendChild(outEl);
+        }
+
+        // Auto-refresh config and status if mutation command executed
+        const lower = commandLine.toLowerCase();
+        if (
+            lower.startsWith('server') ||
+            lower.startsWith('schedule') ||
+            lower.startsWith('start') ||
+            lower.startsWith('stop') ||
+            lower.startsWith('restart') ||
+            lower.startsWith('token') ||
+            lower.startsWith('webhook') ||
+            lower.startsWith('trigger')
+        ) {
+            await fetchConfig();
+            await fetchStatus();
+        }
+    } catch (err) {
+        const errEl = document.createElement('div');
+        errEl.className = 'text-rose-400';
+        errEl.textContent = `❌ CLI Communication Error: ${err.message}`;
+        terminalOutput.appendChild(errEl);
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = 'Run';
+        }
+        // Auto scroll to bottom
+        terminalOutput.scrollTop = terminalOutput.scrollHeight;
+        const input = document.getElementById('cliTerminalInput');
+        if (input) input.focus();
+    }
+}
+
+function clearCliTerminal() {
+    const terminalOutput = document.getElementById('cliTerminalOutput');
+    if (terminalOutput) {
+        terminalOutput.innerHTML = `
+            <div class="text-emerald-400 font-bold">⚡ Terminal Cleared</div>
+            <div class="text-zinc-500 text-[11px] pb-2 border-b border-zinc-800">Connected to live spinning server. Type <span class="text-discord-blurple font-bold">help</span> for commands.</div>
+        `;
+    }
+    const input = document.getElementById('cliTerminalInput');
+    if (input) input.focus();
+}
+
+function copyCliTerminalOutput() {
+    const terminalOutput = document.getElementById('cliTerminalOutput');
+    if (!terminalOutput) return;
+    const text = terminalOutput.innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        showNotificationToast('Terminal output copied to clipboard!', 'success');
+    }).catch(() => {
+        showNotificationToast('Failed to copy to clipboard', 'warning');
+    });
+}
+
