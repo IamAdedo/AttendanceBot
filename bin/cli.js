@@ -4,16 +4,18 @@
  * bin/cli.js
  *
  * AttendanceBot Interactive and Command-Line Management Interface.
- * Version: 3.3.0
+ * Version: 3.7.0
  *
  * Supports:
- * 1. Managing while the web server is spinning (connects over HTTP API to localhost:3000).
- * 2. Standalone offline mode when the server is not running (direct local config & DaemonManager).
- * 3. Direct CLI argument execution: `attendanceBot status`, `attendanceBot list`, `attendanceBot start`, etc.
- * 4. Interactive menu wizard for servers, schedules, credentials, and daemon lifecycle.
- * 5. Configuration export & import with strict JSON schema validation.
- * 6. PM2 background service management.
- * 7. Spinning up the web dashboard server from CLI.
+ * 1. Dual-interface management: Terminal CLI and Web Dashboard.
+ * 2. Spinning up the Web Dashboard in a dedicated separate terminal window (Windows, macOS, Linux GUI, tmux)
+ *    or detached background process so the user can continue interacting with the CLI without interruption.
+ * 3. Offline standalone mode with direct local config & DaemonManager when web server is not running.
+ * 4. Online synchronization over HTTP REST API to localhost:3271 when web server is spinning.
+ * 5. Direct CLI argument execution: `attendanceBot status`, `attendanceBot list`, `attendanceBot start`, etc.
+ * 6. Interactive menu wizard for servers, duplicate detection with redirect, schedules, credentials, and daemon.
+ * 7. Configuration export & import with strict JSON schema validation.
+ * 8. PM2 background service management (install, uninstall, status, logs).
  */
 
 const fs = require('fs');
@@ -21,17 +23,26 @@ const path = require('path');
 const readline = require('readline');
 const http = require('http');
 const https = require('https');
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execSync } = require('child_process');
 const cron = require('node-cron');
 
 const CliEngine = require('../src/cliEngine');
 const { validateConfigSchema } = require('../src/schemaValidator');
+const { VERSION, DISPLAY_VERSION } = require('../src/version');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
-const SERVER_PORT = process.env.PORT || 3000;
-const SERVER_URL = `http://127.0.0.1:${SERVER_PORT}`;
+const PID_PATH = path.join(__dirname, '..', '.server.pid');
+const LOGS_DIR = path.join(__dirname, '..', 'logs');
+const SERVER_LOG_PATH = path.join(LOGS_DIR, 'server.log');
 
-let serverOnline = false;
+// Force primary base port to 3271 and prevent conflicts by never looking at port 3000
+const PRIMARY_BASE_PORT = 3271;
+const SERVER_PORT = (process.env.PORT && process.env.PORT !== '3000')
+    ? parseInt(process.env.PORT, 10)
+    : PRIMARY_BASE_PORT;
+let activeServerUrl = `http://127.0.0.1:${SERVER_PORT}`;
+const SERVER_URL = activeServerUrl;
+
 let serverStatusData = null;
 
 const rl = readline.createInterface({
@@ -62,11 +73,12 @@ async function askMultiline(defaultValue = 'Present') {
 }
 
 /**
- * Fast probe to see if AttendanceBot Web Server is online
+ * Fast probe to see if AttendanceBot Web Server is online on primary base port 3271.
+ * Strictly avoids looking at port 3000 to prevent port conflicts.
  */
 function probeServer() {
     return new Promise((resolve) => {
-        const req = http.get(`${SERVER_URL}/api/status`, { timeout: 1200 }, (res) => {
+        const req = http.get(`http://127.0.0.1:${SERVER_PORT}/api/status`, { timeout: 1200 }, (res) => {
             if (res.statusCode >= 200 && res.statusCode < 300) {
                 let body = '';
                 res.on('data', (c) => { body += c; });
@@ -74,6 +86,7 @@ function probeServer() {
                     try {
                         const parsed = JSON.parse(body);
                         serverStatusData = parsed;
+                        activeServerUrl = `http://127.0.0.1:${SERVER_PORT}`;
                         resolve(true);
                     } catch (e) {
                         resolve(false);
@@ -83,7 +96,9 @@ function probeServer() {
                 resolve(false);
             }
         });
-        req.on('error', () => resolve(false));
+        req.on('error', () => {
+            resolve(false);
+        });
         req.on('timeout', () => {
             req.destroy();
             resolve(false);
@@ -97,7 +112,7 @@ function probeServer() {
 function execViaServer(commandLine) {
     return new Promise((resolve) => {
         const payload = JSON.stringify({ command: commandLine });
-        const req = http.request(`${SERVER_URL}/api/cli/exec`, {
+        const req = http.request(`${activeServerUrl}/api/cli/exec`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -163,6 +178,167 @@ function saveConfig(data) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
+/**
+ * Open default web browser cross-platform
+ */
+function openBrowser(url) {
+    try {
+        const platform = process.platform;
+        if (platform === 'win32') {
+            exec(`start "" "${url}"`);
+        } else if (platform === 'darwin') {
+            exec(`open "${url}"`);
+        } else if (process.env.DISPLAY || process.env.WAYLAND_DISPLAY) {
+            exec(`xdg-open "${url}"`);
+        }
+    } catch (e) {}
+}
+
+/**
+ * Cross-platform launcher to spin up the Web Dashboard server in a NEW terminal window.
+ * If running on Windows, macOS, or Linux GUI, it opens a distinct terminal window so the server
+ * output runs independently and does NOT block the current terminal.
+ * If in headless Linux, Android Termux, or Docker, it launches as a detached background process
+ * logging to logs/server.log so the current CLI continues interacting smoothly.
+ */
+function launchServerInNewTerminal() {
+    const projectRoot = path.resolve(__dirname, '..');
+    const serverScript = path.join(projectRoot, 'server.js');
+    const platform = process.platform;
+    const hasDisplay = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+    const isTmux = Boolean(process.env.TMUX);
+
+    // Ensure logs directory exists
+    if (!fs.existsSync(LOGS_DIR)) {
+        try { fs.mkdirSync(LOGS_DIR, { recursive: true }); } catch (e) {}
+    }
+
+    // 1. Windows: Native CMD window
+    if (platform === 'win32') {
+        const winCmd = `start "AttendanceBot Web Server (Port ${SERVER_PORT})" cmd.exe /k "cd /d \"${projectRoot}\" && node server.js"`;
+        exec(winCmd);
+        return { type: 'new_window', mode: 'Windows CMD Window' };
+    }
+
+    // 2. macOS: Terminal.app AppleScript
+    if (platform === 'darwin') {
+        const appleScript = `tell application "Terminal" to do script "cd \\"${projectRoot}\\" && node server.js"`;
+        exec(`osascript -e '${appleScript}'`);
+        return { type: 'new_window', mode: 'macOS Terminal Window' };
+    }
+
+    // 3. Tmux session: New window
+    if (isTmux) {
+        try {
+            exec(`tmux new-window -n "attendancebot-web" "cd '${projectRoot}' && node server.js"`);
+            return { type: 'new_window', mode: 'tmux Window' };
+        } catch (e) {}
+    }
+
+    // 4. Linux Desktop GUI: Try common desktop terminal emulators
+    if (platform === 'linux' && hasDisplay) {
+        const termEmulators = [
+            { bin: 'x-terminal-emulator', args: `-T "AttendanceBot Web Server" -e "node '${serverScript}'"` },
+            { bin: 'gnome-terminal', args: `--title="AttendanceBot Web Server" -- node "${serverScript}"` },
+            { bin: 'konsole', args: `--new-tab -e node "${serverScript}"` },
+            { bin: 'xfce4-terminal', args: `--title="AttendanceBot Web Server" -e "node '${serverScript}'"` },
+            { bin: 'xterm', args: `-title "AttendanceBot Web Server" -e "node '${serverScript}'"` },
+            { bin: 'alacritty', args: `-e node "${serverScript}"` },
+            { bin: 'kitty', args: `node "${serverScript}"` }
+        ];
+
+        for (const t of termEmulators) {
+            try {
+                const check = execSync(`which ${t.bin} 2>/dev/null`).toString().trim();
+                if (check) {
+                    exec(`${t.bin} ${t.args}`, { cwd: projectRoot });
+                    return { type: 'new_window', mode: `Linux ${t.bin}` };
+                }
+            } catch (e) {}
+        }
+    }
+
+    // 5. Headless Linux / Android Termux / Docker / AI Studio container:
+    // Detached background child process with stdout/stderr piped to logs/server.log
+    const outStream = fs.openSync(SERVER_LOG_PATH, 'a');
+    const child = spawn('node', ['server.js'], {
+        cwd: projectRoot,
+        detached: true,
+        stdio: ['ignore', outStream, outStream],
+    });
+    child.unref();
+
+    try {
+        fs.writeFileSync(PID_PATH, String(child.pid), 'utf8');
+    } catch (e) {}
+
+    return { type: 'background', mode: 'Detached Background Daemon', pid: child.pid, logPath: SERVER_LOG_PATH };
+}
+
+/**
+ * Stops the running web server if tracked by PID or listening on port
+ */
+async function stopWebServer() {
+    console.log('\n⏳ Stopping AttendanceBot Web Server...');
+
+    let stopped = false;
+    if (fs.existsSync(PID_PATH)) {
+        try {
+            const pidStr = fs.readFileSync(PID_PATH, 'utf8').trim();
+            const pid = parseInt(pidStr, 10);
+            if (!isNaN(pid) && pid > 0) {
+                process.kill(pid, 'SIGTERM');
+                stopped = true;
+            }
+            fs.unlinkSync(PID_PATH);
+        } catch (e) {}
+    }
+
+    // Also attempt killing via fuser / pkill on linux/mac if needed
+    if (!stopped) {
+        try {
+            if (process.platform !== 'win32') {
+                execSync(`fuser -k ${SERVER_PORT}/tcp 2>/dev/null || true`);
+                stopped = true;
+            }
+        } catch (e) {}
+    }
+
+    // Wait a moment and check
+    await new Promise((r) => setTimeout(r, 800));
+    const stillOnline = await probeServer();
+    if (!stillOnline) {
+        console.log('✅ Web Dashboard server has been stopped.');
+    } else {
+        console.log('⚠️ Server process did not stop immediately. It may have been started externally.');
+    }
+}
+
+/**
+ * Displays recent lines from logs/server.log
+ */
+async function viewWebServerLogs() {
+    console.clear();
+    console.log('📋 --- Web Server Logs (logs/server.log) ---');
+    if (!fs.existsSync(SERVER_LOG_PATH)) {
+        console.log('No web server log file found yet (logs/server.log).');
+    } else {
+        try {
+            const content = fs.readFileSync(SERVER_LOG_PATH, 'utf8');
+            const lines = content.split('\n').filter(Boolean);
+            const recent = lines.slice(-30);
+            if (recent.length === 0) {
+                console.log('(Log file is empty)');
+            } else {
+                recent.forEach((l) => console.log(l));
+            }
+        } catch (e) {
+            console.log(`Failed to read log file: ${e.message}`);
+        }
+    }
+    await ask('\nPress Enter to return...');
+}
+
 function printHeader(isOnline = false, statusData = null) {
     console.clear();
     console.log(`
@@ -173,16 +349,17 @@ function printHeader(isOnline = false, statusData = null) {
 ███████║   ██║      ██║   ███████╗██║ ╚████║██████╔╝██║  ██║██║ ╚████║╚██████╗███████╗
 ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═══╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝ ╚═════╝╚══════╝
   `);
-    console.log('⚡ AttendanceBot CLI Manager • v3.3.0');
+    console.log(`⚡ AttendanceBot Management Hub • ${DISPLAY_VERSION}`);
+    console.log('💡 Dual Interface: Interactive Terminal CLI & Web Dashboard');
     if (isOnline) {
         const daemonStatus = statusData?.status || 'UNKNOWN';
         const userTag = statusData?.user?.tag || (statusData?.user?.username ? `@${statusData.user.username}` : '');
-        const daemonBadge = daemonStatus === 'RUNNING' ? `🟢 DAEMON RUNNING (${userTag})` : `⚪ DAEMON ${daemonStatus}`;
-        console.log(`🌐 Dashboard Server : 🟢 LIVE at ${SERVER_URL}`);
-        console.log(`🤖 Bot Status       : ${daemonBadge}`);
+        const daemonBadge = daemonStatus === 'RUNNING' ? `🟢 RUNNING (${userTag})` : `⚪ ${daemonStatus}`;
+        console.log(`🌐 Web Dashboard  : 🟢 LIVE at ${SERVER_URL}`);
+        console.log(`🤖 Discord Daemon : ${daemonBadge}`);
     } else {
-        console.log(`🌐 Server Mode      : ⚪ OFFLINE (Local Standalone Engine Active)`);
-        console.log(`💡 Standalone Ops   : Local daemon, worker tasks, and PM2 service fully available`);
+        console.log(`🌐 Web Dashboard  : ⚪ OFFLINE (Local Standalone Engine Active)`);
+        console.log(`🤖 Discord Daemon : Manage directly in CLI or spin Web Dashboard [W]`);
     }
     console.log('══════════════════════════════════════════════════════════════════════════════\n');
 }
@@ -406,7 +583,6 @@ async function addServerWizard() {
     console.log(`Server ID: ${newServer.id} | Channel ID: ${newServer.channelId}`);
 
     if (isOnline) {
-        // Hot reload server via dispatch
         await dispatchCommand('restart');
     }
 
@@ -694,7 +870,7 @@ async function exportImportMenu() {
         const config = loadConfig();
         const exportPayload = {
             app: 'AttendanceBot',
-            version: '3.3.0',
+            version: VERSION,
             exportedAt: new Date().toISOString(),
             globalWebhookUrl: config.globalWebhookUrl || '',
             servers: config.servers || []
@@ -800,7 +976,8 @@ async function viewLogsAction() {
     const isOnline = await probeServer();
     printHeader(isOnline, serverStatusData);
 
-    const count = await ask('Number of log entries to display (default: 20): ') || '20';
+    console.log('📋 Attendance Activity Logs\n');
+    const count = await ask('Number of log entries to display [default: 20]: ') || '20';
     const r = await dispatchCommand(`logs ${count}`);
     console.log(`\n${r.output}`);
 
@@ -814,7 +991,7 @@ async function updateCredentialsAction() {
     console.log('🔑 Credentials & Webhook Setup\n');
     console.log('  [1] Update Discord User Token');
     console.log('  [2] Update Global Discord Webhook URL');
-    console.log('  [3] Test Current Webhook');
+    console.log('  [3] Test Current Webhook Notification');
     console.log('  [4] Return');
 
     const choice = await ask('\nSelect option (1-4): ');
@@ -864,37 +1041,43 @@ async function interactiveRepl() {
     }
 }
 
-async function spinUpServer() {
+/**
+ * Spawns the web server in a separate terminal window and gives instant feedback
+ */
+async function spinUpServerWorkflow() {
     const isOnline = await probeServer();
     if (isOnline) {
-        console.log(`\n✅ The server is ALREADY spinning at ${SERVER_URL}!`);
+        console.log(`\n✅ The Web Dashboard server is ALREADY spinning live at ${SERVER_URL}!`);
+        const openNow = await ask('Open dashboard in your web browser? (Y/n): ');
+        if (openNow.toLowerCase() !== 'n') {
+            openBrowser(SERVER_URL);
+        }
         await ask('\nPress Enter to return to menu...');
         return;
     }
 
-    console.log('\n🚀 Spinning up AttendanceBot Web Server (node server.js)...');
-    const child = spawn('node', ['server.js'], {
-        cwd: path.join(__dirname, '..'),
-        detached: true,
-        stdio: 'ignore',
-    });
-    child.unref();
+    console.log('\n🚀 Launching AttendanceBot Web Dashboard on a new terminal window...');
+    const result = launchServerInNewTerminal();
 
+    console.log(`   Launcher: ${result.mode || result.type}`);
     console.log('⏳ Waiting for server to initialize...');
+
     let attempts = 0;
-    while (attempts < 10) {
-        await new Promise((r) => setTimeout(r, 800));
+    while (attempts < 12) {
+        await new Promise((r) => setTimeout(r, 600));
         const up = await probeServer();
         if (up) {
-            console.log(`\n🎉 Server is ONLINE and spinning at ${SERVER_URL}!`);
-            console.log('You can access the Web Dashboard in your browser or manage via CLI here.');
-            await ask('\nPress Enter to return to menu...');
+            console.log(`\n🎉 Web Server is ONLINE and spinning at ${SERVER_URL}!`);
+            console.log('   The server runs independently in its own window/process.');
+            console.log('   You can continue interacting with this CLI console freely.');
+            openBrowser(SERVER_URL);
+            await ask('\nPress Enter to continue in CLI...');
             return;
         }
         attempts++;
     }
 
-    console.log('⚠️ Server started in background. If it does not respond shortly, run "npm start" manually.');
+    console.log(`\n⚠️ Web server process dispatched. Check ${SERVER_URL} shortly or view logs with option [L].`);
     await ask('\nPress Enter to return to menu...');
 }
 
@@ -903,21 +1086,29 @@ async function mainMenu() {
         const isOnline = await probeServer();
         printHeader(isOnline, serverStatusData);
 
-        console.log('  [1] View All Configurations & Status');
+        console.log('  --- INTERACTIVE CLI MANAGEMENT ---');
+        console.log('  [1] View All Configurations & Daemon Status');
         console.log('  [2] Add New Server Profile (Wizard with Duplicate Check)');
         console.log('  [3] Manage Servers (Edit, Pause, Resume, Delete, List)');
-        console.log('  [4] Manage Schedule Routines (Add, Edit, Reorder, Pause)');
-        console.log('  [5] Start / Stop Attendance Daemon & PM2 Services');
-        console.log('  [6] Trigger Attendance Check-in (Immediate Test Run)');
-        console.log('  [7] Configuration Backup & Import (Schema-Validated)');
-        console.log('  [8] View Live Activity Logs');
-        console.log('  [9] Discord Credentials & Notification Webhook');
+        console.log('  [4] Manage Schedule Routines (Add, Edit, Reorder, Pause, Delete)');
+        console.log('  [5] Attendance Daemon Controls (Start, Stop, Restart)');
+        console.log('  [6] PM2 Background Service (Install, Uninstall, Status, PM2 Logs)');
+        console.log('  [7] Trigger Attendance Check-in Now (Instant Test Run)');
+        console.log('  [8] Configuration Backup & Import (Strict Schema Validation)');
+        console.log('  [9] Live Activity Logs (Terminal Stream)');
+        console.log('  [10] Discord Credentials & Notification Webhook Setup');
         console.log('  [C] Interactive Command Console (REPL)');
-        console.log('  [S] Spin Up Web Dashboard Server');
+        console.log('');
+        console.log('  --- WEB DASHBOARD CONTROLS ---');
+        console.log(`  [W] Spin Up Web Dashboard (Separate Window / Background)`);
+        console.log(`  [O] Open Web Dashboard in Browser (${SERVER_URL})`);
+        console.log(`  [K] Stop Web Dashboard Server`);
+        console.log(`  [L] View Web Server Output Logs`);
+        console.log('');
         console.log('  [Q] Exit CLI');
         console.log('══════════════════════════════════════════════════════════════════════════════');
 
-        const choice = (await ask('Select an option (1-9, C, S, Q): ')).toLowerCase();
+        const choice = (await ask('Select an option: ')).toLowerCase();
 
         if (choice === '1') {
             const r = await dispatchCommand('status');
@@ -950,23 +1141,95 @@ async function mainMenu() {
         } else if (choice === '5') {
             await toggleDaemonAction();
         } else if (choice === '6') {
-            await triggerTaskAction();
+            await pm2ServiceMenu();
         } else if (choice === '7') {
-            await exportImportMenu();
+            await triggerTaskAction();
         } else if (choice === '8') {
-            await viewLogsAction();
+            await exportImportMenu();
         } else if (choice === '9') {
+            await viewLogsAction();
+        } else if (choice === '10') {
             await updateCredentialsAction();
         } else if (choice === 'c') {
             await interactiveRepl();
-        } else if (choice === 's') {
-            await spinUpServer();
+        } else if (choice === 'w') {
+            await spinUpServerWorkflow();
+        } else if (choice === 'o') {
+            openBrowser(SERVER_URL);
+            console.log(`\n🌐 Opened ${SERVER_URL} in your browser.`);
+            await ask('\nPress Enter to continue...');
+        } else if (choice === 'k') {
+            await stopWebServer();
+            await ask('\nPress Enter to continue...');
+        } else if (choice === 'l') {
+            await viewWebServerLogs();
         } else if (choice === 'q') {
-            console.log('\n👋 Exiting AttendanceBot CLI. Goodbye!\n');
+            console.log('\n👋 Exiting AttendanceBot CLI. Your background daemon and schedules will keep running. Goodbye!\n');
             rl.close();
             process.exit(0);
         }
     }
+}
+
+/**
+ * Initial startup selector when server is offline
+ */
+async function promptStartupMode() {
+    console.clear();
+    console.log(`
+╔══════════════════════════════════════════════════════════════════════════════╗
+║               ⚡ Welcome to AttendanceBot Management Hub (${DISPLAY_VERSION})            ║
+║                  Dual Interface: Interactive CLI & Web Dashboard             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+`);
+    console.log('How would you like to manage AttendanceBot today?\n');
+    console.log('  [1] Interactive Terminal CLI (Default: manage profiles, schedules & daemon here)');
+    console.log(`  [2] Launch Web Dashboard in a New Terminal Window (http://localhost:${SERVER_PORT})`);
+    console.log('  [3] Dual Mode (Spin Web Server in new window + Continue in Terminal CLI)\n');
+
+    const choice = await ask('Select management mode (1-3) [default: 1]: ') || '1';
+
+    if (choice === '2') {
+        console.log('\n🚀 Launching AttendanceBot Web Server in a new window...');
+        launchServerInNewTerminal();
+        console.log('⏳ Waiting for server to initialize...');
+        let attempts = 0;
+        while (attempts < 10) {
+            await new Promise((r) => setTimeout(r, 600));
+            if (await probeServer()) {
+                console.log(`\n🎉 Web Server is ONLINE at ${SERVER_URL}!`);
+                openBrowser(SERVER_URL);
+                console.log('You can open this CLI anytime in a terminal: npm run cli');
+                rl.close();
+                process.exit(0);
+                return;
+            }
+            attempts++;
+        }
+        openBrowser(SERVER_URL);
+        console.log(`\nServer process initiated. Access dashboard at: ${SERVER_URL}`);
+        rl.close();
+        process.exit(0);
+        return;
+    } else if (choice === '3') {
+        console.log('\n🚀 Spinning up Web Server in a new window for Dual Management...');
+        launchServerInNewTerminal();
+        let attempts = 0;
+        while (attempts < 8) {
+            await new Promise((r) => setTimeout(r, 600));
+            if (await probeServer()) {
+                openBrowser(SERVER_URL);
+                break;
+            }
+            attempts++;
+        }
+        // Seamlessly continue into CLI main menu
+        await mainMenu();
+        return;
+    }
+
+    // Default option 1: Enter CLI main menu
+    await mainMenu();
 }
 
 /**
@@ -984,8 +1247,13 @@ async function main() {
         return;
     }
 
-    // Interactive Menu Mode
-    await mainMenu();
+    // Interactive Mode
+    const isOnline = await probeServer();
+    if (!isOnline) {
+        await promptStartupMode();
+    } else {
+        await mainMenu();
+    }
 }
 
 main().catch((err) => {

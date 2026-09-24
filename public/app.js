@@ -93,6 +93,14 @@ async function fetchConfig(isRetry = false) {
     }
 }
 
+function updateGlobalVersionUI(versionStr) {
+    if (!versionStr) return;
+    const formatted = versionStr.startsWith('v') ? versionStr : `v${versionStr}`;
+    document.querySelectorAll('.global-app-version').forEach((el) => {
+        el.textContent = formatted;
+    });
+}
+
 async function fetchStatus(isRetry = false) {
     try {
         const res = await fetch('/api/status');
@@ -102,6 +110,11 @@ async function fetchStatus(isRetry = false) {
         }
         consecutiveStatusFailures = 0;
         currentStatus = await res.json();
+
+        if (currentStatus.displayVersion || currentStatus.version) {
+            updateGlobalVersionUI(currentStatus.displayVersion || currentStatus.version);
+        }
+
         updateDaemonStatusUI();
         updateStats();
 
@@ -346,12 +359,13 @@ function updateCheckinChart(statsData) {
     const peakEl = document.getElementById('chartPeakDay');
 
     if (statsData.summary) {
-        if (totalEl) totalEl.innerText = statsData.summary.totalCheckins ?? '0';
+        const total = statsData.summary.totalCheckins ?? 0;
+        if (totalEl) totalEl.innerText = total;
         if (successEl) successEl.innerText = statsData.summary.totalSuccess ?? '0';
         if (failedEl) failedEl.innerText = statsData.summary.totalFailed ?? '0';
-        if (rateEl) rateEl.innerText = statsData.summary.successRate ?? '100%';
+        if (rateEl) rateEl.innerText = total > 0 ? (statsData.summary.successRate ?? '100%') : '0%';
         if (avgEl) avgEl.innerText = `${statsData.summary.avgDaily ?? '0.0'}/d`;
-        if (peakEl) peakEl.innerText = statsData.summary.peakDay ?? 'None';
+        if (peakEl) peakEl.innerText = total > 0 ? (statsData.summary.peakDay ?? 'None') : 'No runs yet';
     }
 
     renderRechartsCheckins(statsData.daily);
@@ -363,13 +377,46 @@ function renderRechartsCheckins(dailyData) {
     const container = document.getElementById('rechartsOverviewContainer');
     if (!container) return;
 
+    const isLight = document.documentElement.classList.contains('light');
+
+    // If there is zero real attendance data recorded, render a clean, informative zero-state
+    const totalCheckinsCount = (dailyData || []).reduce((acc, d) => acc + (d.checkins || 0), 0);
+    if (totalCheckinsCount === 0) {
+        if (rechartsRoot) {
+            try {
+                if (rechartsRoot.unmount) rechartsRoot.unmount();
+            } catch (e) {}
+            rechartsRoot = null;
+        }
+        container.innerHTML = `
+            <div class="h-full flex flex-col items-center justify-center text-center p-6 border-2 border-dashed ${isLight ? 'border-slate-200 bg-slate-50/70' : 'border-discord-border/60 bg-discord-card/30'} rounded-xl select-none">
+                <div class="w-12 h-12 rounded-xl flex items-center justify-center ${isLight ? 'bg-indigo-50 text-discord-blurple' : 'bg-discord-card text-discord-blurple'} mb-3 shadow-sm text-lg">
+                    <i class="fa-solid fa-chart-line"></i>
+                </div>
+                <h4 class="text-sm font-bold ${isLight ? 'text-slate-800' : 'text-white'} mb-1">No Attendance History Recorded Yet</h4>
+                <p class="text-xs ${isLight ? 'text-slate-500' : 'text-discord-muted'} max-w-md leading-relaxed">
+                    Live metrics and 30-day reliability graphs will render here automatically as real attendance events execute via scheduled cron routines or manual check-in triggers.
+                </p>
+                <div class="mt-4 flex items-center gap-2">
+                    <button onclick="switchTab('servers')" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-discord-blurple hover:bg-indigo-600 text-white transition shadow-sm cursor-pointer flex items-center gap-1.5">
+                        <i class="fa-solid fa-server"></i>
+                        <span>Configure Server Schedules</span>
+                    </button>
+                    <button onclick="switchTab('cli')" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg ${isLight ? 'bg-slate-200 hover:bg-slate-300 text-slate-800' : 'bg-discord-card hover:bg-discord-border text-discord-text'} transition shadow-sm cursor-pointer flex items-center gap-1.5">
+                        <i class="fa-solid fa-terminal"></i>
+                        <span>Open CLI Terminal</span>
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
     // Check if React and Recharts are loaded from UMD scripts
     if (!window.React || !window.ReactDOM || !window.Recharts) {
         setTimeout(() => renderRechartsCheckins(dailyData), 250);
         return;
     }
-
-    const isLight = document.documentElement.classList.contains('light');
 
     const { createElement: h } = window.React;
     const {
@@ -3380,6 +3427,7 @@ function toggleCliTerminalSkin() {
 
 document.addEventListener('DOMContentLoaded', () => {
     initCliTerminalShortcuts();
+    initCliHelpPopover();
 });
 
 async function handleCliTerminalSubmit(e) {
@@ -3419,7 +3467,7 @@ async function executeCliCommand(commandLine) {
     cmdEl.className = 'cli-cmd-line mt-2 pt-1 border-t border-zinc-800/80 flex items-start gap-1.5';
     cmdEl.innerHTML = `
         <span class="cli-prompt text-emerald-400 font-bold select-none">attendancebot:~$</span>
-        <span class="cli-cmd-text text-white font-semibold">${escapeHtml(commandLine)}</span>
+        <span class="cli-cmd-text font-semibold">${escapeHtml(commandLine)}</span>
     `;
     terminalOutput.appendChild(cmdEl);
 
@@ -3445,7 +3493,7 @@ async function executeCliCommand(commandLine) {
             `;
         } else {
             const outEl = document.createElement('div');
-            outEl.className = data.success ? 'cli-output-text text-zinc-300 whitespace-pre-wrap' : 'cli-error-text text-rose-400 whitespace-pre-wrap';
+            outEl.className = data.success ? 'cli-output-text whitespace-pre-wrap' : 'cli-error-text whitespace-pre-wrap';
             outEl.textContent = data.output || '(No output)';
             terminalOutput.appendChild(outEl);
         }
@@ -3504,4 +3552,362 @@ function copyCliTerminalOutput() {
         showNotificationToast('Failed to copy to clipboard', 'warning');
     });
 }
+
+// ============================================================================
+// CLI TERMINAL COMMANDS QUICK REFERENCE POPOVER
+// ============================================================================
+
+const CLI_COMMANDS_REFERENCE = [
+    {
+        cmd: 'status',
+        category: 'Daemon',
+        desc: 'Show daemon state, uptime, connected Discord account, and active watchers',
+        autoRun: true
+    },
+    {
+        cmd: 'start',
+        category: 'Daemon',
+        desc: 'Start background Discord attendance daemon scheduler',
+        autoRun: true
+    },
+    {
+        cmd: 'stop',
+        category: 'Daemon',
+        desc: 'Stop background Discord attendance daemon safely',
+        autoRun: true
+    },
+    {
+        cmd: 'restart',
+        category: 'Daemon',
+        desc: 'Restart daemon and re-register all server cron watchers',
+        autoRun: true
+    },
+    {
+        cmd: 'uptime',
+        category: 'Diagnostics',
+        desc: 'View daemon execution reliability, check-ins count, and process uptime',
+        autoRun: true
+    },
+    {
+        cmd: 'list',
+        category: 'Servers',
+        desc: 'List all configured server profiles, channels, and schedule timers',
+        autoRun: true
+    },
+    {
+        cmd: 'server add <name> <chanId> [cron] [msg]',
+        template: 'server add "New Server" 1234567890 "0 9 * * 1-5" "Present"',
+        category: 'Servers',
+        desc: 'Create a new server profile with channel ID and optional schedule',
+        autoRun: false
+    },
+    {
+        cmd: 'server edit <id> [name] [chan] [hook]',
+        template: 'server edit 1 "Updated Name" 1234567890',
+        category: 'Servers',
+        desc: 'Update existing server name, target channel, or webhook URL',
+        autoRun: false
+    },
+    {
+        cmd: 'server toggle <id|name>',
+        template: 'server toggle 1',
+        category: 'Servers',
+        desc: 'Pause or resume monitoring for a specific server profile',
+        autoRun: false
+    },
+    {
+        cmd: 'server delete <id|name>',
+        template: 'server delete 1',
+        category: 'Servers',
+        desc: 'Permanently remove a server profile and its routines',
+        autoRun: false
+    },
+    {
+        cmd: 'server enable-all',
+        category: 'Servers',
+        desc: 'Bulk activate monitoring for all configured servers',
+        autoRun: true
+    },
+    {
+        cmd: 'server disable-all',
+        category: 'Servers',
+        desc: 'Bulk pause monitoring for all configured servers',
+        autoRun: true
+    },
+    {
+        cmd: 'schedule add <srvId> <cron> [msg]',
+        template: 'schedule add 1 "0 9 * * 1-5" "Present"',
+        category: 'Schedules',
+        desc: 'Add a new cron attendance schedule routine to a server',
+        autoRun: false
+    },
+    {
+        cmd: 'schedule list <srvId>',
+        template: 'schedule list 1',
+        category: 'Schedules',
+        desc: 'Display all schedule routines for a target server profile',
+        autoRun: false
+    },
+    {
+        cmd: 'schedule toggle <srvId> <schedId>',
+        template: 'schedule toggle 1 1',
+        category: 'Schedules',
+        desc: 'Pause or resume an individual attendance routine',
+        autoRun: false
+    },
+    {
+        cmd: 'schedule delete <srvId> <schedId>',
+        template: 'schedule delete 1 1',
+        category: 'Schedules',
+        desc: 'Remove an individual attendance routine from a server',
+        autoRun: false
+    },
+    {
+        cmd: 'schedule reorder <srvId> <id1,id2>',
+        template: 'schedule reorder 1 2,1',
+        category: 'Schedules',
+        desc: 'Update priority execution sequence for server routines',
+        autoRun: false
+    },
+    {
+        cmd: 'trigger <serverId> [scheduleId]',
+        template: 'trigger 1',
+        category: 'Actions',
+        desc: 'Immediately dispatch manual attendance check-in test run',
+        autoRun: false
+    },
+    {
+        cmd: 'logs [count]',
+        template: 'logs 15',
+        category: 'Logs',
+        desc: 'View recent session logs (e.g. logs 15, logs 50)',
+        autoRun: false
+    },
+    {
+        cmd: 'logs clear',
+        category: 'Logs',
+        desc: 'Clear memory log buffer from current daemon session',
+        autoRun: true
+    },
+    {
+        cmd: 'token [new_token]',
+        template: 'token ',
+        category: 'Credentials',
+        desc: 'Inspect or update Discord user authorization token',
+        autoRun: false
+    },
+    {
+        cmd: 'webhook [url]',
+        template: 'webhook ',
+        category: 'Credentials',
+        desc: 'Inspect or update global Discord notification webhook',
+        autoRun: false
+    },
+    {
+        cmd: 'webhook test [url]',
+        template: 'webhook test',
+        category: 'Credentials',
+        desc: 'Send a diagnostic embed alert to test webhook delivery',
+        autoRun: true
+    },
+    {
+        cmd: 'backup',
+        category: 'Config',
+        desc: 'Export complete configuration JSON with schema conformity',
+        autoRun: true
+    },
+    {
+        cmd: 'validate <file.json>',
+        template: 'validate config.json',
+        category: 'Config',
+        desc: 'Validate JSON configuration schema file for errors',
+        autoRun: false
+    },
+    {
+        cmd: 'clear',
+        category: 'Terminal',
+        desc: 'Clear terminal screen output window',
+        autoRun: true
+    },
+    {
+        cmd: 'help [topic]',
+        template: 'help',
+        category: 'Terminal',
+        desc: 'Display interactive terminal manual or command details',
+        autoRun: true
+    }
+];
+
+function initCliHelpPopover() {
+    renderCliHelpCommands(CLI_COMMANDS_REFERENCE);
+
+    // Global click listener to close popover when clicking outside
+    document.addEventListener('click', (e) => {
+        const popover = document.getElementById('cliHelpPopover');
+        const btn = document.getElementById('cliHelpPopoverBtn');
+        if (!popover || popover.classList.contains('hidden')) return;
+
+        if (!popover.contains(e.target) && !btn?.contains(e.target)) {
+            closeCliHelpPopover();
+        }
+    });
+
+    // Escape key to close popover
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const popover = document.getElementById('cliHelpPopover');
+            if (popover && !popover.classList.contains('hidden')) {
+                closeCliHelpPopover();
+            }
+        }
+    });
+}
+
+function toggleCliHelpPopover(event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const popover = document.getElementById('cliHelpPopover');
+    const btn = document.getElementById('cliHelpPopoverBtn');
+    if (!popover) return;
+
+    if (popover.classList.contains('hidden')) {
+        popover.classList.remove('hidden');
+        btn?.setAttribute('aria-expanded', 'true');
+        btn?.classList.add('bg-discord-card', 'text-white', 'border-discord-border');
+        const searchInput = document.getElementById('cliHelpSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            clearCliHelpSearch(false);
+            setTimeout(() => searchInput.focus(), 50);
+        }
+    } else {
+        closeCliHelpPopover();
+    }
+}
+
+function closeCliHelpPopover() {
+    const popover = document.getElementById('cliHelpPopover');
+    const btn = document.getElementById('cliHelpPopoverBtn');
+    if (!popover) return;
+    popover.classList.add('hidden');
+    btn?.setAttribute('aria-expanded', 'false');
+    btn?.classList.remove('bg-discord-card', 'text-white', 'border-discord-border');
+}
+
+function clearCliHelpSearch(focus = true) {
+    const searchInput = document.getElementById('cliHelpSearchInput');
+    const clearBtn = document.getElementById('cliHelpClearSearchBtn');
+    if (searchInput) {
+        searchInput.value = '';
+        if (focus) searchInput.focus();
+    }
+    if (clearBtn) clearBtn.classList.add('hidden');
+    renderCliHelpCommands(CLI_COMMANDS_REFERENCE);
+}
+
+function filterCliHelpCommands(query) {
+    const clearBtn = document.getElementById('cliHelpClearSearchBtn');
+    const q = (query || '').trim().toLowerCase();
+    if (clearBtn) {
+        if (q) clearBtn.classList.remove('hidden');
+        else clearBtn.classList.add('hidden');
+    }
+
+    if (!q) {
+        renderCliHelpCommands(CLI_COMMANDS_REFERENCE);
+        return;
+    }
+
+    const filtered = CLI_COMMANDS_REFERENCE.filter((item) => {
+        return (
+            item.cmd.toLowerCase().includes(q) ||
+            item.category.toLowerCase().includes(q) ||
+            item.desc.toLowerCase().includes(q) ||
+            (item.template && item.template.toLowerCase().includes(q))
+        );
+    });
+
+    renderCliHelpCommands(filtered, q);
+}
+
+function renderCliHelpCommands(list, query = '') {
+    const container = document.getElementById('cliHelpCommandsList');
+    if (!container) return;
+
+    if (!list || list.length === 0) {
+        container.innerHTML = `
+            <div class="p-4 text-center text-discord-muted space-y-1">
+                <i class="fa-solid fa-circle-exclamation text-amber-400 text-sm"></i>
+                <p class="text-xs font-medium">No matching commands found for "${escapeHtml(query)}"</p>
+                <p class="text-[11px]">Try searching "status", "server", "schedule", or "logs"</p>
+            </div>
+        `;
+        return;
+    }
+
+    const categoryBadgeColors = {
+        Daemon: 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+        Servers: 'bg-discord-blurple/15 text-indigo-300 border-discord-blurple/30',
+        Schedules: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        Actions: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+        Logs: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+        Credentials: 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30',
+        Config: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+        Diagnostics: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+        Terminal: 'bg-zinc-600/15 text-zinc-300 border-zinc-600/30'
+    };
+
+    let html = '';
+    list.forEach((item) => {
+        const badgeClass = categoryBadgeColors[item.category] || 'bg-discord-card text-discord-muted border-discord-border';
+        const targetCommand = item.template || item.cmd;
+        const safeTargetCmd = escapeHtml(targetCommand);
+        const safeCmdDisplay = escapeHtml(item.cmd);
+        const safeDesc = escapeHtml(item.desc);
+
+        html += `
+            <div class="cli-help-cmd-item group p-2 rounded-lg hover:bg-discord-card/70 transition cursor-pointer flex flex-col gap-1 border border-transparent hover:border-discord-border/50" onclick="insertCliHelpCommand('${safeTargetCmd}', ${item.autoRun})">
+                <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-mono font-bold text-xs text-white group-hover:text-emerald-400 transition flex items-center gap-1">
+                        <span class="text-discord-blurple font-semibold text-[11px] select-none">&gt;</span>
+                        <code>${safeCmdDisplay}</code>
+                    </span>
+                    <span class="text-[9px] font-semibold px-1.5 py-0.5 rounded border uppercase tracking-wider ${badgeClass}">
+                        ${escapeHtml(item.category)}
+                    </span>
+                </div>
+                <p class="text-[11px] text-discord-muted leading-tight">${safeDesc}</p>
+                <div class="flex items-center justify-between text-[10px] text-discord-muted/70 pt-0.5 opacity-0 group-hover:opacity-100 transition">
+                    <span class="font-mono text-zinc-400">Insert: ${safeTargetCmd}</span>
+                    <span class="text-discord-blurple font-semibold flex items-center gap-0.5">
+                        ${item.autoRun ? '<i class="fa-solid fa-play text-[8px]"></i> Click to run' : '<i class="fa-solid fa-arrow-turn-down text-[8px]"></i> Click to insert'}
+                    </span>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+function insertCliHelpCommand(cmd, autoRun = false) {
+    switchTab('cli');
+    const input = document.getElementById('cliTerminalInput');
+    if (input) {
+        input.value = cmd;
+        input.focus();
+    }
+    closeCliHelpPopover();
+
+    if (autoRun && cmd && !cmd.includes('<') && !cmd.includes('[')) {
+        cliCommandHistory.push(cmd);
+        cliHistoryIndex = -1;
+        executeCliCommand(cmd);
+    } else {
+        showNotificationToast(`Inserted "${cmd}" into terminal`, 'info');
+    }
+}
+
 

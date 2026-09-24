@@ -5,11 +5,15 @@ const daemonManager = require('./src/daemonManager');
 const logger = require('./src/logger');
 const attendanceHistory = require('./src/attendanceHistory');
 const CliEngine = require('./src/cliEngine');
+const { VERSION, DISPLAY_VERSION } = require('./src/version');
 
 const { validateConfigSchema } = require('./src/schemaValidator');
 
 const app = express();
-const PORT = 3000;
+
+// Force primary base port to 3271 and prevent conflicts by never using port 3000
+const PRIMARY_BASE_PORT = 3271;
+const PORT = PRIMARY_BASE_PORT;
 const HOST = '0.0.0.0';
 
 const cliEngine = new CliEngine({ daemonManager, logger, attendanceHistory });
@@ -40,18 +44,46 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+
+// Dynamic template injection for global version consistency
+app.get(['/', '/index.html'], (req, res) => {
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    fs.readFile(indexPath, 'utf8', (err, html) => {
+        if (err) return res.sendFile(indexPath);
+        const rendered = html
+            .replace(/\{\{APP_VERSION\}\}/g, DISPLAY_VERSION)
+            .replace(/\{\{RAW_VERSION\}\}/g, VERSION);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(rendered);
+    });
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // --- REST API Endpoints ---
 
-// Get daemon and application status
+// Get daemon and application status with global version
 app.get('/api/status', (req, res) => {
     try {
-        res.json(daemonManager.getStatus());
+        const status = daemonManager.getStatus();
+        res.json({
+            ...status,
+            version: VERSION,
+            displayVersion: DISPLAY_VERSION
+        });
     } catch (err) {
         logger.error(`Error in /api/status: ${err.message}`);
         res.status(500).json({ error: 'Failed to retrieve status', details: err.message });
     }
+});
+
+// Dedicated global version endpoint
+app.get('/api/version', (req, res) => {
+    res.json({
+        app: 'AttendanceBot',
+        version: VERSION,
+        displayVersion: DISPLAY_VERSION
+    });
 });
 
 // Get current config
@@ -124,7 +156,7 @@ app.get('/api/config/export', (req, res) => {
     const config = daemonManager.getConfig();
     const exportData = {
         app: 'AttendanceBot',
-        version: '3.3.0',
+        version: VERSION,
         exportedAt: new Date().toISOString(),
         globalWebhookUrl: config.globalWebhookUrl || '',
         servers: config.servers || [],
@@ -595,12 +627,57 @@ app.use('/api', (req, res) => {
     res.status(404).json({ error: 'API endpoint not found' });
 });
 
-// Fallback index.html for SPA/Web dashboard
+// Fallback index.html for SPA/Web dashboard with global version injected
 app.use((req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    fs.readFile(indexPath, 'utf8', (err, html) => {
+        if (err) return res.sendFile(indexPath);
+        const rendered = html
+            .replace(/\{\{APP_VERSION\}\}/g, DISPLAY_VERSION)
+            .replace(/\{\{RAW_VERSION\}\}/g, VERSION);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(rendered);
+    });
 });
 
 // Start Express Server
-app.listen(PORT, HOST, () => {
-    logger.success(`AttendanceBot Web Dashboard online and listening at http://${HOST}:${PORT}`);
+// 1. Primary Base Port 3271 (Dedicated AttendanceBot Dashboard & CLI sync port)
+const server = app.listen(PORT, HOST, () => {
+    logger.success(`AttendanceBot Web Dashboard online and live on primary base port http://${HOST}:${PORT}`);
 });
+
+server.on('error', (err) => {
+    if (err.code !== 'EADDRINUSE') {
+        logger.error(`Error binding primary base port ${PORT}: ${err.message}`);
+    }
+});
+
+// 2. Dev server container adapter on port 3000 (required for dev preview container health check)
+if (PORT !== 3000) {
+    try {
+        const previewServer = app.listen(3000, HOST, () => {
+            logger.info(`Dev preview container adapter online on port 3000`);
+        });
+        previewServer.on('error', (err) => {
+            if (err.code !== 'EADDRINUSE') {
+                logger.warn(`Port 3000 preview listener notice: ${err.message}`);
+            }
+        });
+    } catch (e) {}
+}
+
+// 3. Container runtime port (e.g. Cloud Run process.env.PORT)
+const ENV_PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+if (ENV_PORT && ENV_PORT !== PORT && ENV_PORT !== 3000) {
+    try {
+        const envServer = app.listen(ENV_PORT, HOST, () => {
+            logger.info(`Container runtime adapter online on port ${ENV_PORT}`);
+        });
+        envServer.on('error', (err) => {
+            if (err.code !== 'EADDRINUSE') {
+                logger.warn(`Container port ${ENV_PORT} notice: ${err.message}`);
+            }
+        });
+    } catch (e) {}
+}
+

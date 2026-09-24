@@ -16,8 +16,8 @@
 
 ## 📌 Badges & Metadata
 
-- **Current Version:** `v3.2.0`
-- **Dashboard Port:** `http://localhost:3000`
+- **Current Version:** `v3.7.0`
+- **Dashboard Port:** `http://localhost:3271` (Primary Base Port)
 - **Node.js Requirement:** `18.0.0` or higher
 - **License:** MIT
 - **Supported Platforms:** Windows, macOS, Linux, and Android (Termux — No Root Needed)
@@ -29,7 +29,7 @@
 **AttendanceBot** automates daily attendance and scheduled check-ins across multiple Discord servers and channels. It supports sending custom text messages (e.g., `"Present"`, multi-line updates) or reacting with emojis to messages at defined schedules.
 
 You can manage the bot via:
-1. **Interactive Web Dashboard** on `http://localhost:3000` with real-time statistics, drag-and-drop reordering, one-click manual test runs, and rate-limit conflict detection.
+1. **Interactive Web Dashboard** on `http://localhost:3271` with real-time statistics, drag-and-drop reordering, one-click manual test runs, and rate-limit conflict detection.
 2. **Terminal CLI & Remote Controller** (`npm run cli` / `node bin/cli.js`) for rapid headless administration.
 3. **Background Daemon** running 24/7 with auto-restart on system boot.
 
@@ -37,7 +37,7 @@ You can manage the bot via:
 
 ## ✨ Features
 
-- 🌐 **Modern Web Management Dashboard** — Responsive Discord dark/light interface on port 3000 for managing servers, schedules, credentials, and live daemon controls.
+- 🌐 **Modern Web Management Dashboard** — Responsive Discord dark/light interface on active port 3271 for managing servers, schedules, credentials, and live daemon controls.
 - ⚠️ **Rate-Limit Conflict Detection & Visual Warning Icons** *(New in v3.1)* — Prominent visual warning icons on the server profile card (avatar badge, header tag, channel row, and schedule rows) when multiple routines trigger within a 5-minute window in the same channel, preventing potential Discord rate-limiting.
 - 🔀 **Drag-and-Drop Schedule Prioritization** — Reorder attendance execution sequences with intuitive drag-and-drop rows, priority indicators (`#1`, `#2`...), and up/down controls.
 - ⏱️ **Time Elapsed Since Last Check-in** — Live check-in clock badge (`fa-regular fa-clock`) on each server profile row and server header calculating exact elapsed time since the last successful attendance check-in.
@@ -78,7 +78,7 @@ npm start
 ```
 
 Open your browser to:
-👉 **`http://localhost:3000`**
+👉 **`http://localhost:3271`**
 
 From the dashboard you can:
 - Enter your **Discord User Token** securely under **Credentials & Webhook**.
@@ -175,6 +175,15 @@ npm run service:uninstall
   npm install -g pm2-windows-startup
   pm2-startup install
   ```
+  Note: some windows machine disabled running scripts out-of-the-box. For more information, see about_Execution_Policies at [https:/go.microsoft.com/fwlink/?LinkID=135170](https:/go.microsoft.com/fwlink/?LinkID=135170).
+  
+  Run this if your scripts is disabled on your system. 
+  ```powershell
+  Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+  npm install -g pm2-windows-startup
+  pm2-startup install
+  ```
+
 - **macOS:**
   ```bash
   npx pm2 startup launchd
@@ -229,7 +238,44 @@ npm run service:uninstall
 
 ## 📝 Changelog
 
-### Version 3.2.0 (Current)
+### Version 3.7.0 (Current)
+- **❓ Interactive CLI Terminal Console Quick Reference Popover:**
+  - Integrated an interactive Help icon button (`fa-circle-question`) right inside the CLI Terminal console header (`#cliTerminalTitleBar`).
+  - Opens a floating quick-reference cheat sheet listing all available commands across Daemon, Servers, Schedules, Actions, Logs, Credentials, Config, Diagnostics, and Utilities.
+  - Includes real-time search filtering, instant command insertion into the prompt line, and one-click execution for standalone commands.
+  - Features click-outside and Escape key dismissal with full light & dark theme compatibility.
+- **🌐 Dev Server Startup & Multi-Port Listening:**
+  - Configured Express server in `server.js` with dual-adapter listeners: retaining **port 3271** as the primary base port while providing the dev container adapter on **port 3000**.
+  - Resolved dev server startup check and enabled simultaneous local dashboard access and iframe preview.
+
+---
+
+### Version 3.6.0
+- **🚫 Complete Elimination of Port 3000 Conflicts & Primary Base Port 3271 Enforcement:**
+  - Configured AttendanceBot to **never look at, probe, or bind port 3000** under any circumstances, preventing development environment and local service collisions.
+  - Hardened Express server configuration to strictly use **port 3271** as the sole primary base port (`PRIMARY_BASE_PORT = 3271`).
+  - Removed all legacy preview adapters and secondary listeners on port 3000 in `server.js`.
+  - Updated CLI server detection (`probeServer` in `bin/cli.js`) to exclusively probe port 3271 without falling back or querying port 3000.
+  - Documented strict port policy in `.env.example` and project configuration guides.
+
+---
+
+### Version 3.5.0
+- **🌐 Single Source of Truth Global Versioning:**
+  - Consolidated version resolution in `src/version.js` dynamically resolving from `package.json`.
+  - Synchronized header badge (`#appHeaderVersionBadge`) and footer badge (`#appFooterVersionBadge`) with `.global-app-version`.
+  - Added dedicated `/api/version` endpoint and included dynamic version metadata in `/api/status`, export payloads, and schema validator.
+
+---
+
+### Version 3.4.0 & 3.3.0
+- **⚡ Enhanced Schema Validation & CLI Management:**
+  - Expanded JSON schema validator with deep channel snowflake checks and cron format linting.
+  - Added live daemon process synchronization between CLI engine and Web Dashboard via hot-reloading watchers.
+
+---
+
+### Version 3.2.0
 - **🖥️ Light-Mode CLI Terminal Readability Overhaul:**
   - Redesigned light-theme styles for the web-based interactive CLI console.
   - Command prompts (`attendancebot:~$`), user input, execution output, error states, and quick-command chips now feature crisp, accessible contrast in light mode.
@@ -283,7 +329,7 @@ npm run service:uninstall
 
 ### Version 2.0.0 & 2.1.0
 - **🌐 Web Management Dashboard & REST API:**
-  - Built Express full-stack architecture running on port 3000 (`server.js`, `public/index.html`, `public/app.js`).
+  - Built Express full-stack architecture with dedicated dashboard UI (`server.js`, `public/index.html`, `public/app.js`).
   - Implemented Discord dark and light themes with responsive navigation.
   - Added live daemon process management (Start, Stop, Restart) directly from the browser.
 - **👍 Reaction-Based Attendance:**
@@ -338,4 +384,8 @@ AttendanceBot adheres to semantic versioning guidelines:
 - **License:** MIT License
 - **Issues & Contributions:** Contributions and bug reports are welcome via GitHub Issues.
 
-*...with love by [https://iamadedo.vercel.app](The !Lazy Hunter) <||>*
+*...with love by [https://iamadedo.vercel.app](The \!Lazy Hunter) <||>*
+
+
+
+

@@ -4,10 +4,11 @@
  * Comprehensive JSON Schema Validator for AttendanceBot server profiles and schedules.
  * Validates configuration exports/imports to ensure structural conformity and data integrity.
  *
- * Version: 3.3.0
+ * Version: 3.7.0
  */
 
 const cron = require('node-cron');
+const { VERSION } = require('./version');
 
 /**
  * Validates Discord snowflake IDs (channelId, messageId, etc.)
@@ -275,7 +276,7 @@ function validateConfigSchema(data) {
         warnings,
         sanitized: isValid ? {
             app: 'AttendanceBot',
-            version: '3.3.0',
+            version: VERSION,
             globalWebhookUrl: globalWebhook,
             globalToken: globalToken,
             servers: sanitizedServers

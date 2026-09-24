@@ -17,6 +17,7 @@ const defaultDaemonManager = require('./daemonManager');
 const defaultLogger = require('./logger');
 const defaultAttendanceHistory = require('./attendanceHistory');
 const { validateConfigSchema } = require('./schemaValidator');
+const { VERSION, DISPLAY_VERSION } = require('./version');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config.json');
 
@@ -226,7 +227,7 @@ class CliEngine {
 
         const lines = [
             '═══════════════════════════════════════════════════════════════',
-            '⚡ AttendanceBot CLI Commands & Operations (v3.3.0)',
+            `⚡ AttendanceBot CLI Commands & Operations (${DISPLAY_VERSION})`,
             '═══════════════════════════════════════════════════════════════',
             '  status                                 Show daemon status & health overview',
             '  start                                  Start background Discord attendance daemon',
@@ -303,7 +304,7 @@ class CliEngine {
             `  Daemon State     : ${statusEmoji}`,
             `  Discord Account  : ${userTag}`,
             `  Daemon Uptime    : ${uptimeStr}`,
-            `  Web Server Port  : 3000 (Dashboard: http://localhost:3000)`,
+            `  Web Server Port  : 3271 (Dashboard: http://localhost:3271)`,
             `  Discord Token    : ${config.globalToken ? `Configured (${config.globalToken.substring(0, 8)}...)` : '❌ MISSING (run "token <value>")'}`,
             `  Global Webhook   : ${config.globalWebhookUrl ? config.globalWebhookUrl.substring(0, 45) + '...' : 'Not Configured'}`,
             `  Server Profiles  : ${servers.length} configured (${activeServers.length} active)`,

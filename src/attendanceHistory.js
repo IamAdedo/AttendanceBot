@@ -17,15 +17,12 @@ class AttendanceHistory {
                 this.history = JSON.parse(raw);
                 if (!Array.isArray(this.history)) this.history = [];
             } else {
-                this.seedInitialHistory();
+                this.history = [];
+                this.save();
             }
         } catch (err) {
             console.error('[AttendanceHistory] Error loading history:', err.message);
-            this.seedInitialHistory();
-        }
-
-        if (this.history.length === 0) {
-            this.seedInitialHistory();
+            this.history = [];
         }
     }
 
@@ -35,56 +32,6 @@ class AttendanceHistory {
         } catch (err) {
             console.error('[AttendanceHistory] Error saving history:', err.message);
         }
-    }
-
-    seedInitialHistory() {
-        const seeded = [];
-        const now = new Date('2026-09-16T09:00:00Z');
-        const servers = [
-            { id: '1', name: 'Work / Study Server', channelId: '1234567890123456789' },
-            { id: 'test_server_conflict', name: 'Math Department Discord', channelId: '987654321098765432' }
-        ];
-
-        // Seed 30 days of check-in activity
-        for (let d = 29; d >= 0; d--) {
-            const targetDate = new Date(now.getTime() - d * 24 * 60 * 60 * 1000);
-            const dayOfWeek = targetDate.getUTCDay(); // 0 = Sun, 6 = Sat
-            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-
-            // Generate daily check-ins
-            const count = isWeekend ? (Math.random() > 0.7 ? 1 : 0) : Math.floor(Math.random() * 3) + 2;
-
-            for (let i = 0; i < count; i++) {
-                const server = servers[i % servers.length];
-                const hour = 9 + Math.floor(Math.random() * 8);
-                const minute = Math.floor(Math.random() * 59);
-                const recordTime = new Date(targetDate);
-                recordTime.setUTCHours(hour, minute, Math.floor(Math.random() * 50), 0);
-
-                // Small realistic failure rate (~3%)
-                const isFail = d === 12 && i === 1;
-                const isReaction = i % 2 === 1;
-
-                seeded.push({
-                    id: `att_${recordTime.getTime()}_${i}`,
-                    timestamp: recordTime.toISOString(),
-                    date: recordTime.toISOString().slice(0, 10),
-                    serverId: server.id,
-                    serverName: server.name,
-                    channelId: server.channelId,
-                    scheduleId: `sched_${i + 1}`,
-                    scheduleLabel: isReaction ? 'Afternoon Rollcall' : 'Morning Check-in',
-                    type: isReaction ? 'REACTION' : 'MESSAGE',
-                    status: isFail ? 'FAILED' : 'SUCCESS',
-                    error: isFail ? 'Discord API 429: Rate limit exceeded on route /channels/messages' : null,
-                    details: isFail ? 'Failed to post attendance message' : (isReaction ? 'Reacted with 👍 to latest attendance post' : 'Posted "Present" successfully')
-                });
-            }
-        }
-
-        seeded.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        this.history = seeded;
-        this.save();
     }
 
     recordExecution({ serverId, serverName, channelId, scheduleId, scheduleLabel, type, status, error, details }) {
@@ -166,7 +113,7 @@ class AttendanceHistory {
             }
         });
 
-        const successRate = totalCheckins > 0 ? ((totalSuccess / totalCheckins) * 100).toFixed(1) : '100.0';
+        const successRate = totalCheckins > 0 ? ((totalSuccess / totalCheckins) * 100).toFixed(1) : '0.0';
         const avgDaily = (totalCheckins / days).toFixed(1);
 
         return {

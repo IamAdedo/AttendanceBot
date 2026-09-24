@@ -1,7 +1,7 @@
 {
     "name": "attendanceBot",
-    "version": "3.3.0",
-    "description": "Multi-server Discord daily attendance background daemon",
+    "version": "3.7.0",
+    "description": "Multi-server Discord daily attendance background daemon and web management dashboard",
     "main": "src/bot.js",
     "bin": {
         "attendanceBot": "bin/cli.js"
@@ -11,7 +11,9 @@
         "build": "node -e \"console.log('Build complete')\"",
         "lint": "node -e \"console.log('No lint issues')\"",
         "start": "node server.js",
+        "web": "node server.js",
         "cli": "node bin/cli.js",
+        "manage": "node bin/cli.js",
         "bot:daemon": "node src/bot.js",
         "service:install": "node bin/install-service.js",
         "service:uninstall": "node bin/uninstall-service.js",

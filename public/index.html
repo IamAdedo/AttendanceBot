@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AttendanceBot Dashboard</title>
-  <meta name="description" content="Multi-server Discord daily attendance background daemon and web management control panel." />
+  <title>AttendanceBot</title>
+  <meta name="description" content="Multi-server Discord daily attendance background daemon and web management dashboard." />
+  <meta property="og:title" content="AttendanceBot" />
+  <meta property="og:description" content="Multi-server Discord daily attendance background daemon and web management dashboard." />
   <!-- Theme Early Initializer (Prevents FOUC) -->
   <script>
     (function() {
@@ -465,16 +467,17 @@
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalTitleBar {
       background-color: #f1f5f9 !important;
-      border-color: #e2e8f0 !important;
-      color: #334155 !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalTitleBar span {
-      color: #475569 !important;
+      color: #1e293b !important;
+      font-weight: 700 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalTitleBar button {
-      color: #475569 !important;
+      color: #334155 !important;
       background-color: transparent !important;
     }
 
@@ -484,85 +487,108 @@
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput {
-      background-color: #f8fafc !important;
+      background-color: #ffffff !important;
       color: #0f172a !important;
+      border-color: #e2e8f0 !important;
     }
 
+    /* Ensure every text node in light terminal output is high-contrast dark charcoal */
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput,
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput div,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput span.cli-output-text,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput pre {
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput span,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput pre,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput code,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-output-text {
       color: #0f172a !important;
       font-weight: 500;
     }
 
+    /* Prompt indicator */
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-prompt,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput span.cli-prompt,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalForm .cli-prompt,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalForm span.text-emerald-400 {
+      color: #047857 !important; /* Deep forest green, 7.8:1 contrast */
+      font-weight: 800 !important;
+    }
+
+    /* User submitted command text */
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-cmd-text,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput span.cli-cmd-text,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-cmd-line .text-white,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput span.text-white {
+      color: #0f172a !important; /* Deep black/slate */
+      font-weight: 700 !important;
+    }
+
+    /* Output text */
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-output-text,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput div.cli-output-text {
+      color: #0f172a !important;
+      font-weight: 600 !important;
+    }
+
+    /* Error text */
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-error-text,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput div.cli-error-text,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-rose-400,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-rose-500 {
+      color: #b91c1c !important; /* Crimson red, 7.5:1 contrast */
+      font-weight: 700 !important;
+    }
+
+    /* Banner notices and chip highlights in light mode */
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-emerald-400,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-emerald-500,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-prompt {
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-emerald-500 {
       color: #047857 !important;
       font-weight: 800 !important;
     }
 
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-cmd-text,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput span.text-white {
-      color: #0f172a !important;
-      font-weight: 700 !important;
-    }
-
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-zinc-400,
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-zinc-500 {
-      color: #475569 !important;
+      color: #334155 !important;
+      font-weight: 600 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-zinc-300 {
       color: #0f172a !important;
-      font-weight: 500 !important;
+      font-weight: 600 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-discord-blurple {
-      color: #4338ca !important;
+      color: #3730a3 !important; /* Deep blurple/indigo */
       font-weight: 700 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-amber-300,
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-amber-400 {
-      color: #b45309 !important;
-      font-weight: 600 !important;
-    }
-
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-rose-400,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .text-rose-500,
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .cli-error-text {
-      color: #dc2626 !important;
-      font-weight: 600 !important;
+      color: #92400e !important; /* Deep amber */
+      font-weight: 700 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .border-zinc-800,
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalOutput .border-zinc-800\/80 {
-      border-color: #e2e8f0 !important;
+      border-color: #cbd5e1 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalForm {
       background-color: #f1f5f9 !important;
-      border-color: #e2e8f0 !important;
+      border-color: #cbd5e1 !important;
     }
 
-    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalForm span.text-emerald-400 {
-      color: #047857 !important;
-      font-weight: 800 !important;
-    }
-
+    /* Text typed by user inside prompt input */
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalInput {
       background-color: #ffffff !important;
       color: #0f172a !important;
       border: 1px solid #cbd5e1 !important;
       border-radius: 6px !important;
-      padding: 5px 10px !important;
-      font-weight: 600 !important;
+      padding: 6px 12px !important;
+      font-weight: 700 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalInput::placeholder {
-      color: #94a3b8 !important;
-      font-weight: 400 !important;
+      color: #64748b !important;
+      font-weight: 500 !important;
     }
 
     /* Force Dark Terminal Skin (or Dark Theme default) */
@@ -726,7 +752,7 @@
         <div>
           <div class="flex items-center space-x-2">
             <h1 class="font-black text-lg text-white tracking-wide">AttendanceBot</h1>
-            <span class="text-xs px-2 py-0.5 rounded-full bg-discord-blurple/20 text-indigo-300 font-semibold border border-discord-blurple/30">v3.3.0</span>
+            <span id="appHeaderVersionBadge" class="global-app-version text-xs px-2 py-0.5 rounded-full bg-discord-blurple/20 text-indigo-300 font-semibold border border-discord-blurple/30">{{APP_VERSION}}</span>
           </div>
           <p class="text-xs text-discord-muted">By IamAdedo, dlazyHNTR • Discord Multi-Server Automation</p>
         </div>
@@ -1407,17 +1433,17 @@
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <div class="flex items-center gap-2 flex-wrap">
-              <h2 class="text-base font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-terminal text-emerald-400"></i>
+              <h2 class="text-base font-bold text-discord-text flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-500"></i>
                 <span>Interactive CLI Management Terminal</span>
               </h2>
-              <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1.5">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-400 dark:text-emerald-300 border border-emerald-500/30 inline-flex items-center gap-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>Live Server Sync</span>
               </span>
             </div>
             <p class="text-xs text-discord-muted mt-1">
-              Manage AttendanceBot via CLI in your browser or through terminal commands (<code class="text-zinc-300 font-mono">npm run cli</code>). Both operate concurrently with the spinning server!
+              Manage AttendanceBot via CLI in your browser or through terminal commands (<code class="text-discord-text font-mono bg-discord-card px-1.5 py-0.5 rounded border border-discord-border">npm run cli</code>). Both operate concurrently with the spinning server!
             </p>
           </div>
 
@@ -1429,10 +1455,10 @@
             <button onclick="runCliChip('list')" title="Run 'list' command" class="cli-chip-neutral px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border hover:border-discord-blurple transition cursor-pointer">
               list
             </button>
-            <button onclick="runCliChip('start')" title="Run 'start' command" class="cli-chip-emerald px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition cursor-pointer">
+            <button onclick="runCliChip('start')" title="Run 'start' command" class="cli-chip-emerald px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-500 dark:text-emerald-300 border border-emerald-500/30 transition cursor-pointer">
               start
             </button>
-            <button onclick="runCliChip('stop')" title="Run 'stop' command" class="cli-chip-rose px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 transition cursor-pointer">
+            <button onclick="runCliChip('stop')" title="Run 'stop' command" class="cli-chip-rose px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 dark:text-rose-300 border border-rose-500/30 transition cursor-pointer">
               stop
             </button>
             <button onclick="runCliChip('uptime')" title="Run 'uptime' command" class="cli-chip-neutral px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border hover:border-discord-blurple transition cursor-pointer">
@@ -1441,23 +1467,97 @@
             <button onclick="runCliChip('logs 15')" title="Run 'logs 15' command" class="cli-chip-neutral px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-discord-card hover:bg-discord-border text-discord-text border border-discord-border hover:border-discord-blurple transition cursor-pointer">
               logs 15
             </button>
-            <button onclick="runCliChip('help')" title="Run 'help' command" class="cli-chip-indigo px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 transition cursor-pointer">
+            <button onclick="runCliChip('help')" title="Run 'help' command" class="cli-chip-indigo px-2.5 py-1 text-xs font-mono font-medium rounded-md bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-500 dark:text-indigo-300 border border-indigo-500/30 transition cursor-pointer">
               help
             </button>
           </div>
         </div>
 
         <!-- Terminal Window Frame -->
-        <div id="cliTerminalWindow" class="rounded-xl overflow-hidden border border-discord-border bg-black/90 shadow-2xl">
+        <div id="cliTerminalWindow" class="rounded-xl border border-discord-border bg-black/90 shadow-2xl relative">
           <!-- Terminal Title Bar -->
-          <div id="cliTerminalTitleBar" class="px-4 py-2.5 bg-discord-darker/90 border-b border-discord-border flex items-center justify-between select-none">
+          <div id="cliTerminalTitleBar" class="rounded-t-xl px-4 py-2.5 bg-discord-darker/90 border-b border-discord-border flex items-center justify-between select-none relative">
             <div class="flex items-center space-x-2">
               <div class="w-3 h-3 rounded-full bg-rose-500/80"></div>
               <div class="w-3 h-3 rounded-full bg-amber-500/80"></div>
               <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
               <span class="text-xs font-mono text-discord-muted ml-2 font-medium">attendancebot@live ~ bash</span>
             </div>
-            <div class="flex items-center space-x-2 text-xs">
+            <div class="flex items-center space-x-2 text-xs relative">
+              <!-- CLI Quick Reference Help Popover Button -->
+              <div class="relative">
+                <button
+                  id="cliHelpPopoverBtn"
+                  type="button"
+                  onclick="toggleCliHelpPopover(event)"
+                  title="CLI Command Reference & Help"
+                  class="text-discord-muted hover:text-white px-2 py-0.5 rounded hover:bg-discord-card transition cursor-pointer flex items-center gap-1 border border-transparent hover:border-discord-border/60"
+                  aria-haspopup="true"
+                  aria-expanded="false"
+                >
+                  <i class="fa-solid fa-circle-question text-discord-blurple"></i>
+                  <span class="hidden sm:inline font-medium">Help</span>
+                </button>
+
+                <!-- Help Popover Dropdown -->
+                <div
+                  id="cliHelpPopover"
+                  class="hidden absolute right-0 top-full mt-2 w-[310px] sm:w-[390px] bg-discord-dark border border-discord-border rounded-xl shadow-2xl z-50 flex flex-col backdrop-blur-md overflow-hidden text-left"
+                  onclick="event.stopPropagation()"
+                >
+                  <!-- Popover Header -->
+                  <div class="px-3.5 py-2.5 border-b border-discord-border flex items-center justify-between bg-discord-darker/95">
+                    <div class="flex items-center space-x-2">
+                      <div class="w-6 h-6 rounded-md bg-discord-blurple/15 border border-discord-blurple/30 flex items-center justify-center text-discord-blurple">
+                        <i class="fa-solid fa-terminal text-xs"></i>
+                      </div>
+                      <div>
+                        <div class="flex items-center gap-1.5">
+                          <span class="text-xs font-bold text-white tracking-wide">CLI Commands Reference</span>
+                          <span class="global-app-version text-[10px] px-1.5 py-0.2 rounded bg-discord-blurple/20 text-indigo-300 font-mono font-semibold">{{APP_VERSION}}</span>
+                        </div>
+                        <p class="text-[10px] text-discord-muted">Terminal command cheat sheet</p>
+                      </div>
+                    </div>
+                    <button type="button" onclick="closeCliHelpPopover()" class="text-discord-muted hover:text-white p-1 rounded hover:bg-discord-card transition cursor-pointer" title="Close reference">
+                      <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                  </div>
+
+                  <!-- Quick Search Filter -->
+                  <div class="p-2 border-b border-discord-border/60 bg-discord-card/25">
+                    <div class="relative">
+                      <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-discord-muted text-[11px]"></i>
+                      <input
+                        type="text"
+                        id="cliHelpSearchInput"
+                        placeholder="Search command (e.g. status, trigger, server)..."
+                        oninput="filterCliHelpCommands(this.value)"
+                        class="w-full bg-discord-darker border border-discord-border/80 rounded-lg pl-7 pr-7 py-1 text-xs text-discord-text focus:outline-none focus:border-discord-blurple font-mono placeholder-discord-muted/60"
+                      />
+                      <button id="cliHelpClearSearchBtn" type="button" onclick="clearCliHelpSearch()" class="hidden absolute right-2 top-1/2 -translate-y-1/2 text-discord-muted hover:text-white text-[10px] cursor-pointer">
+                        <i class="fa-solid fa-circle-xmark"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Commands List Container -->
+                  <div id="cliHelpCommandsList" class="p-2 space-y-1.5 overflow-y-auto max-h-[300px] text-xs divide-y divide-discord-border/20">
+                    <!-- Populated dynamically via initCliHelpPopover() -->
+                  </div>
+
+                  <!-- Popover Footer -->
+                  <div class="px-3 py-2 border-t border-discord-border/60 bg-discord-darker/95 flex items-center justify-between text-[11px] text-discord-muted select-none">
+                    <span class="flex items-center gap-1 text-[10px] sm:text-[11px]">
+                      <i class="fa-solid fa-mouse-pointer text-discord-blurple"></i> Click command to insert into terminal
+                    </span>
+                    <button type="button" onclick="runCliChip('help'); closeCliHelpPopover();" class="text-discord-blurple hover:underline font-mono text-[10px] sm:text-[11px] cursor-pointer">
+                      Full Help in Terminal &rarr;
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <button id="cliTerminalSkinBtn" onclick="toggleCliTerminalSkin()" title="Toggle Light / Dark terminal appearance" class="text-discord-muted hover:text-white px-2 py-0.5 rounded hover:bg-discord-card transition cursor-pointer flex items-center gap-1">
                 <i id="cliTerminalSkinIcon" class="fa-solid fa-circle-half-stroke"></i>
                 <span id="cliTerminalSkinText" class="hidden sm:inline">Theme</span>
@@ -1479,14 +1579,14 @@
           </div>
 
           <!-- Command Prompt Input Line -->
-          <form id="cliTerminalForm" onsubmit="handleCliTerminalSubmit(event)" class="px-4 py-2.5 bg-discord-darker/95 border-t border-discord-border flex items-center space-x-2">
-            <span class="text-emerald-400 font-mono font-bold text-xs select-none shrink-0">attendancebot:~$</span>
+          <form id="cliTerminalForm" onsubmit="handleCliTerminalSubmit(event)" class="rounded-b-xl px-4 py-2.5 bg-discord-darker/95 border-t border-discord-border flex items-center space-x-2">
+            <span class="text-emerald-400 font-mono font-bold text-xs select-none shrink-0 cli-prompt">attendancebot:~$</span>
             <input
               type="text"
               id="cliTerminalInput"
               autocomplete="off"
               spellcheck="false"
-              class="flex-1 bg-transparent text-white font-mono text-xs focus:outline-none placeholder-zinc-500"
+              class="flex-1 bg-transparent text-discord-text font-mono text-xs focus:outline-none placeholder-zinc-500"
               placeholder="Type command here (e.g. status, list, server add, trigger 1)..."
             />
             <button
@@ -1502,7 +1602,7 @@
         <!-- CLI Reference & Dual-Mode Info -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
           <div class="cli-info-card p-3 rounded-lg bg-discord-card/40 border border-discord-border/50 space-y-1">
-            <span class="font-bold text-white flex items-center gap-1.5">
+            <span class="font-bold text-discord-text flex items-center gap-1.5">
               <i class="fa-solid fa-bolt text-amber-400"></i>
               <span>Live Concurrent Sync</span>
             </span>
@@ -1511,23 +1611,23 @@
             </p>
           </div>
           <div class="cli-info-card p-3 rounded-lg bg-discord-card/40 border border-discord-border/50 space-y-1">
-            <span class="font-bold text-white flex items-center gap-1.5">
+            <span class="font-bold text-discord-text flex items-center gap-1.5">
               <i class="fa-solid fa-terminal text-emerald-400"></i>
               <span>Terminal CLI Commands</span>
             </span>
             <p class="text-discord-muted text-[11px] leading-relaxed font-mono">
-              <code class="text-zinc-300">node bin/cli.js status</code><br/>
-              <code class="text-zinc-300">node bin/cli.js list</code><br/>
-              <code class="text-zinc-300">node bin/cli.js start / stop</code>
+              <code class="text-discord-text bg-discord-card px-1 py-0.5 rounded border border-discord-border">node bin/cli.js status</code><br/>
+              <code class="text-discord-text bg-discord-card px-1 py-0.5 rounded border border-discord-border">node bin/cli.js list</code><br/>
+              <code class="text-discord-text bg-discord-card px-1 py-0.5 rounded border border-discord-border">node bin/cli.js start / stop</code>
             </p>
           </div>
           <div class="cli-info-card p-3 rounded-lg bg-discord-card/40 border border-discord-border/50 space-y-1">
-            <span class="font-bold text-white flex items-center gap-1.5">
+            <span class="font-bold text-discord-text flex items-center gap-1.5">
               <i class="fa-solid fa-keyboard text-discord-blurple"></i>
               <span>Command History</span>
             </span>
             <p class="text-discord-muted text-[11px] leading-relaxed">
-              Use the <strong class="text-white">Up / Down Arrow</strong> keys in the prompt line to recall and re-execute previous commands like a real shell.
+              Use the <strong class="text-discord-text">Up / Down Arrow</strong> keys in the prompt line to recall and re-execute previous commands like a real shell.
             </p>
           </div>
         </div>
@@ -2106,9 +2206,9 @@
 
   <footer class="mt-auto border-t border-discord-border/60 bg-discord-dark py-3 px-4 sm:px-6">
     <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between text-xs text-discord-muted gap-2">
-      <p>⚡ AttendanceBot v3.3.0 • Designed for reliable daily Discord attendance.</p>
+      <p>⚡ AttendanceBot <span id="appFooterVersionBadge" class="global-app-version font-medium">{{APP_VERSION}}</span> • Designed for reliable daily Discord attendance.</p>
       <div class="flex items-center space-x-4">
-        <span>Port 3000 Active</span>
+        <span>Port 3271 Active</span>
         <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
         <span>Node.js Runtime</span>
       </div>
