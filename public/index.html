@@ -582,13 +582,45 @@
       color: #0f172a !important;
       border: 1px solid #cbd5e1 !important;
       border-radius: 6px !important;
-      padding: 6px 12px !important;
+      padding: 6px 32px 6px 12px !important;
       font-weight: 700 !important;
     }
 
     html.light #cliTerminalWindow:not(.force-dark-terminal) #cliTerminalInput::placeholder {
       color: #64748b !important;
       font-weight: 500 !important;
+    }
+
+    /* Command History Arrow Button & Drop-up in Light Mode */
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropupBtn {
+      color: #64748b !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropupBtn:hover {
+      color: #0f172a !important;
+      background-color: #e2e8f0 !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.08) !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup .bg-discord-darker\/95,
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup .bg-discord-darker\/90 {
+      background-color: #f8fafc !important;
+      border-color: #e2e8f0 !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup span.text-white {
+      color: #0f172a !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup .cli-history-item {
+      color: #0f172a !important;
+      border-color: #f1f5f9 !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup .cli-history-item span.text-white {
+      color: #1e293b !important;
+    }
+    html.light #cliTerminalWindow:not(.force-dark-terminal) #cliHistoryDropup .cli-history-item:hover {
+      background-color: #f1f5f9 !important;
     }
 
     /* Force Dark Terminal Skin (or Dark Theme default) */
@@ -670,7 +702,7 @@
       background-color: transparent !important;
       color: #ffffff !important;
       border: none !important;
-      padding: 0 !important;
+      padding: 0 28px 0 0 !important;
     }
 
     #cliTerminalWindow.force-dark-terminal #cliTerminalInput::placeholder,
@@ -1579,16 +1611,80 @@
           </div>
 
           <!-- Command Prompt Input Line -->
-          <form id="cliTerminalForm" onsubmit="handleCliTerminalSubmit(event)" class="rounded-b-xl px-4 py-2.5 bg-discord-darker/95 border-t border-discord-border flex items-center space-x-2">
+          <form id="cliTerminalForm" onsubmit="handleCliTerminalSubmit(event)" class="rounded-b-xl px-4 py-2.5 bg-discord-darker/95 border-t border-discord-border flex items-center space-x-2 relative">
             <span class="text-emerald-400 font-mono font-bold text-xs select-none shrink-0 cli-prompt">attendancebot:~$</span>
-            <input
-              type="text"
-              id="cliTerminalInput"
-              autocomplete="off"
-              spellcheck="false"
-              class="flex-1 bg-transparent text-discord-text font-mono text-xs focus:outline-none placeholder-zinc-500"
-              placeholder="Type command here (e.g. status, list, server add, trigger 1)..."
-            />
+            <div class="relative flex-1 flex items-center min-w-0">
+              <input
+                type="text"
+                id="cliTerminalInput"
+                autocomplete="off"
+                spellcheck="false"
+                class="w-full bg-transparent text-discord-text font-mono text-xs focus:outline-none placeholder-zinc-500 pr-8"
+                placeholder="Type command here (e.g. status, list, server add, trigger 1)..."
+              />
+              <!-- Small arrow button for Command History drop-up -->
+              <button
+                type="button"
+                id="cliHistoryDropupBtn"
+                onclick="toggleCliHistoryDropup(event)"
+                title="Command History: Click to select or re-run past commands"
+                aria-label="Toggle Command History drop-up"
+                aria-haspopup="true"
+                aria-expanded="false"
+                class="absolute right-1 text-discord-muted hover:text-white px-1.5 py-1 rounded hover:bg-discord-card/80 transition cursor-pointer flex items-center justify-center text-xs"
+              >
+                <i id="cliHistoryArrowIcon" class="fa-solid fa-chevron-up text-[11px] transition-transform duration-200"></i>
+              </button>
+
+              <!-- Command History Drop-up List -->
+              <div
+                id="cliHistoryDropup"
+                class="hidden absolute left-0 right-0 bottom-full mb-2 bg-discord-dark border border-discord-border rounded-xl shadow-2xl z-40 backdrop-blur-md overflow-hidden text-left flex flex-col max-h-72"
+                onclick="event.stopPropagation()"
+              >
+                <!-- Drop-up Header -->
+                <div class="px-3.5 py-2 border-b border-discord-border bg-discord-darker/95 flex items-center justify-between select-none">
+                  <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-clock-rotate-left text-discord-blurple text-xs"></i>
+                    <span class="text-xs font-bold text-white tracking-wide">Command History</span>
+                    <span id="cliHistoryCountBadge" class="text-[10px] px-1.5 py-0.2 rounded bg-discord-card border border-discord-border text-discord-muted font-mono">0 commands</span>
+                  </div>
+                  <div class="flex items-center space-x-1.5">
+                    <button
+                      type="button"
+                      id="cliClearHistoryBtn"
+                      onclick="clearCliHistory(event)"
+                      title="Clear command history"
+                      class="text-[11px] text-discord-muted hover:text-rose-400 px-1.5 py-0.5 rounded hover:bg-discord-card transition cursor-pointer flex items-center gap-1"
+                    >
+                      <i class="fa-solid fa-trash-can text-[10px]"></i>
+                      <span class="text-[10px]">Clear</span>
+                    </button>
+                    <button
+                      type="button"
+                      onclick="closeCliHistoryDropup()"
+                      class="text-discord-muted hover:text-white p-1 rounded hover:bg-discord-card transition cursor-pointer"
+                      title="Close history"
+                    >
+                      <i class="fa-solid fa-xmark text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Drop-up Items List -->
+                <div id="cliHistoryItemsList" class="p-1.5 space-y-1 overflow-y-auto max-h-52 divide-y divide-discord-border/20 font-mono text-xs">
+                  <!-- Populated dynamically via renderCliHistoryDropup() -->
+                </div>
+
+                <!-- Drop-up Footer -->
+                <div class="px-3 py-1.5 border-t border-discord-border/50 bg-discord-darker/90 flex items-center justify-between text-[10px] text-discord-muted select-none">
+                  <span class="flex items-center gap-1">
+                    <i class="fa-solid fa-mouse-pointer text-discord-blurple text-[9px]"></i> Click to select &bull; <i class="fa-solid fa-play text-emerald-400 text-[8px] ml-1"></i> Re-run instantly
+                  </span>
+                  <span class="font-mono text-zinc-500">Esc to close</span>
+                </div>
+              </div>
+            </div>
             <button
               type="submit"
               id="cliSubmitBtn"
@@ -1623,11 +1719,11 @@
           </div>
           <div class="cli-info-card p-3 rounded-lg bg-discord-card/40 border border-discord-border/50 space-y-1">
             <span class="font-bold text-discord-text flex items-center gap-1.5">
-              <i class="fa-solid fa-keyboard text-discord-blurple"></i>
+              <i class="fa-solid fa-clock-rotate-left text-discord-blurple"></i>
               <span>Command History</span>
             </span>
             <p class="text-discord-muted text-[11px] leading-relaxed">
-              Use the <strong class="text-discord-text">Up / Down Arrow</strong> keys in the prompt line to recall and re-execute previous commands like a real shell.
+              Click the <strong class="text-discord-text"><i class="fa-solid fa-chevron-up text-[10px]"></i> arrow icon</strong> on the input field or use the <strong class="text-discord-text">Up / Down Arrow</strong> keys to quickly select and re-run past commands.
             </p>
           </div>
         </div>

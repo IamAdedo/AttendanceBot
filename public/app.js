@@ -3425,9 +3425,34 @@ function toggleCliTerminalSkin() {
     }
 }
 
+function addCommandToHistory(cmd) {
+    if (!cmd || typeof cmd !== 'string') return;
+    const trimmed = cmd.trim();
+    if (!trimmed) return;
+
+    // Deduplicate: remove if exists earlier so latest occurrence is at the end of the history array (and top of drop-up)
+    const existingIndex = cliCommandHistory.indexOf(trimmed);
+    if (existingIndex !== -1) {
+        cliCommandHistory.splice(existingIndex, 1);
+    }
+    cliCommandHistory.push(trimmed);
+
+    // Keep history capped at 50 commands
+    if (cliCommandHistory.length > 50) {
+        cliCommandHistory.shift();
+    }
+
+    try {
+        localStorage.setItem('attendancebot_cli_history', JSON.stringify(cliCommandHistory));
+    } catch (e) {}
+
+    renderCliHistoryDropup();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initCliTerminalShortcuts();
     initCliHelpPopover();
+    initCliHistory();
 });
 
 async function handleCliTerminalSubmit(e) {
@@ -3437,8 +3462,8 @@ async function handleCliTerminalSubmit(e) {
     const cmd = input.value.trim();
     if (!cmd) return;
 
-    // Push to history
-    cliCommandHistory.push(cmd);
+    closeCliHistoryDropup();
+    addCommandToHistory(cmd);
     cliHistoryIndex = -1;
     input.value = '';
 
@@ -3451,7 +3476,8 @@ async function runCliChip(cmd) {
     if (input) {
         input.value = cmd;
     }
-    cliCommandHistory.push(cmd);
+    closeCliHistoryDropup();
+    addCommandToHistory(cmd);
     cliHistoryIndex = -1;
     await executeCliCommand(cmd);
 }
@@ -3773,6 +3799,7 @@ function toggleCliHelpPopover(event) {
     if (!popover) return;
 
     if (popover.classList.contains('hidden')) {
+        closeCliHistoryDropup();
         popover.classList.remove('hidden');
         btn?.setAttribute('aria-expanded', 'true');
         btn?.classList.add('bg-discord-card', 'text-white', 'border-discord-border');
@@ -3900,14 +3927,236 @@ function insertCliHelpCommand(cmd, autoRun = false) {
         input.focus();
     }
     closeCliHelpPopover();
+    closeCliHistoryDropup();
 
     if (autoRun && cmd && !cmd.includes('<') && !cmd.includes('[')) {
-        cliCommandHistory.push(cmd);
+        addCommandToHistory(cmd);
         cliHistoryIndex = -1;
         executeCliCommand(cmd);
     } else {
         showNotificationToast(`Inserted "${cmd}" into terminal`, 'info');
     }
 }
+
+// =========================================================================
+// CLI COMMAND HISTORY DROP-UP CONTROLLER
+// =========================================================================
+
+function initCliHistory() {
+    try {
+        const stored = localStorage.getItem('attendancebot_cli_history');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                cliCommandHistory = parsed;
+            } else {
+                cliCommandHistory = ['status', 'list'];
+            }
+        } else {
+            cliCommandHistory = ['status', 'list'];
+            try {
+                localStorage.setItem('attendancebot_cli_history', JSON.stringify(cliCommandHistory));
+            } catch (e) {}
+        }
+    } catch (e) {
+        cliCommandHistory = ['status', 'list'];
+    }
+
+    renderCliHistoryDropup();
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        const dropup = document.getElementById('cliHistoryDropup');
+        const btn = document.getElementById('cliHistoryDropupBtn');
+        if (!dropup || dropup.classList.contains('hidden')) return;
+
+        if (!dropup.contains(e.target) && !btn?.contains(e.target)) {
+            closeCliHistoryDropup();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const dropup = document.getElementById('cliHistoryDropup');
+            if (dropup && !dropup.classList.contains('hidden')) {
+                closeCliHistoryDropup();
+            }
+        }
+    });
+}
+
+function toggleCliHistoryDropup(event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const dropup = document.getElementById('cliHistoryDropup');
+    const btn = document.getElementById('cliHistoryDropupBtn');
+    const icon = document.getElementById('cliHistoryArrowIcon');
+    if (!dropup) return;
+
+    if (dropup.classList.contains('hidden')) {
+        closeCliHelpPopover();
+        renderCliHistoryDropup();
+        dropup.classList.remove('hidden');
+        btn?.setAttribute('aria-expanded', 'true');
+        btn?.classList.add('text-discord-blurple');
+        if (icon) {
+            icon.classList.add('rotate-180', 'text-discord-blurple');
+        }
+    } else {
+        closeCliHistoryDropup();
+    }
+}
+
+function closeCliHistoryDropup() {
+    const dropup = document.getElementById('cliHistoryDropup');
+    const btn = document.getElementById('cliHistoryDropupBtn');
+    const icon = document.getElementById('cliHistoryArrowIcon');
+    if (!dropup) return;
+
+    dropup.classList.add('hidden');
+    btn?.setAttribute('aria-expanded', 'false');
+    btn?.classList.remove('text-discord-blurple');
+    if (icon) {
+        icon.classList.remove('rotate-180', 'text-discord-blurple');
+    }
+}
+
+function renderCliHistoryDropup() {
+    const listEl = document.getElementById('cliHistoryItemsList');
+    const badgeEl = document.getElementById('cliHistoryCountBadge');
+    if (!listEl) return;
+
+    if (badgeEl) {
+        badgeEl.textContent = `${cliCommandHistory.length} ${cliCommandHistory.length === 1 ? 'command' : 'commands'}`;
+    }
+
+    if (cliCommandHistory.length === 0) {
+        listEl.innerHTML = `
+            <div class="p-4 text-center text-discord-muted space-y-1.5 select-none">
+                <i class="fa-solid fa-clock-rotate-left text-discord-blurple/60 text-lg"></i>
+                <p class="text-xs font-semibold text-white/90">No command history yet</p>
+                <p class="text-[11px] text-discord-muted">Commands you run will appear here for fast re-execution.</p>
+                <div class="pt-2 flex flex-wrap justify-center gap-1.5">
+                    <button type="button" onclick="selectAndRunCliHistoryCommand('status')" class="px-2.5 py-1 rounded bg-discord-card hover:bg-discord-border text-discord-text text-[11px] border border-discord-border cursor-pointer">
+                        <i class="fa-solid fa-play text-[9px] text-emerald-400 mr-1"></i>Run status
+                    </button>
+                    <button type="button" onclick="selectAndRunCliHistoryCommand('list')" class="px-2.5 py-1 rounded bg-discord-card hover:bg-discord-border text-discord-text text-[11px] border border-discord-border cursor-pointer">
+                        <i class="fa-solid fa-play text-[9px] text-emerald-400 mr-1"></i>Run list
+                    </button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // Show most recently executed commands at top
+    const reversed = [...cliCommandHistory].reverse();
+    let html = '';
+    reversed.forEach((cmd) => {
+        const safeCmd = escapeHtml(cmd);
+        html += `
+            <div class="cli-history-item group px-2.5 py-1.5 rounded-lg flex items-center justify-between gap-2 hover:bg-discord-card/80 transition cursor-pointer border border-transparent hover:border-discord-border/50" onclick="selectCliHistoryCommand('${safeCmd}')">
+                <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span class="text-discord-blurple font-bold select-none text-[11px] shrink-0">&gt;</span>
+                    <span class="font-mono text-xs text-white group-hover:text-emerald-400 transition truncate" title="${safeCmd}">${safeCmd}</span>
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0" onclick="event.stopPropagation()">
+                    <button
+                        type="button"
+                        onclick="selectCliHistoryCommand('${safeCmd}')"
+                        title="Fill command into prompt"
+                        class="px-2 py-0.5 rounded text-[10px] text-discord-muted hover:text-white bg-discord-dark hover:bg-discord-card border border-discord-border/50 transition cursor-pointer"
+                    >
+                        Select
+                    </button>
+                    <button
+                        type="button"
+                        onclick="selectAndRunCliHistoryCommand('${safeCmd}')"
+                        title="Re-run command immediately"
+                        class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-white border border-emerald-500/30 transition flex items-center gap-1 cursor-pointer"
+                    >
+                        <i class="fa-solid fa-play text-[8px]"></i>
+                        <span>Re-run</span>
+                    </button>
+                    <button
+                        type="button"
+                        onclick="removeCliHistoryItem('${safeCmd}', event)"
+                        title="Remove from history"
+                        class="text-discord-muted/60 hover:text-rose-400 p-1 rounded hover:bg-discord-card transition cursor-pointer opacity-0 group-hover:opacity-100"
+                    >
+                        <i class="fa-solid fa-xmark text-[10px]"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    listEl.innerHTML = html;
+}
+
+function selectCliHistoryCommand(cmd) {
+    switchTab('cli');
+    const input = document.getElementById('cliTerminalInput');
+    if (input) {
+        input.value = cmd;
+        input.focus();
+        input.selectionStart = input.selectionEnd = input.value.length;
+    }
+    closeCliHistoryDropup();
+    showNotificationToast(`Selected "${cmd}"`, 'info');
+}
+
+async function selectAndRunCliHistoryCommand(cmd) {
+    switchTab('cli');
+    const input = document.getElementById('cliTerminalInput');
+    if (input) {
+        input.value = cmd;
+    }
+    closeCliHistoryDropup();
+    addCommandToHistory(cmd);
+    cliHistoryIndex = -1;
+    await executeCliCommand(cmd);
+}
+
+function removeCliHistoryItem(cmd, event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    const idx = cliCommandHistory.indexOf(cmd);
+    if (idx !== -1) {
+        cliCommandHistory.splice(idx, 1);
+        try {
+            localStorage.setItem('attendancebot_cli_history', JSON.stringify(cliCommandHistory));
+        } catch (e) {}
+        renderCliHistoryDropup();
+        showNotificationToast(`Removed "${cmd}" from history`, 'info');
+    }
+}
+
+function clearCliHistory(event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    cliCommandHistory = [];
+    cliHistoryIndex = -1;
+    try {
+        localStorage.removeItem('attendancebot_cli_history');
+    } catch (e) {}
+    renderCliHistoryDropup();
+    showNotificationToast('Command history cleared', 'info');
+}
+
+// Expose handlers globally
+window.toggleCliHistoryDropup = toggleCliHistoryDropup;
+window.closeCliHistoryDropup = closeCliHistoryDropup;
+window.selectCliHistoryCommand = selectCliHistoryCommand;
+window.selectAndRunCliHistoryCommand = selectAndRunCliHistoryCommand;
+window.removeCliHistoryItem = removeCliHistoryItem;
+window.clearCliHistory = clearCliHistory;
 
 

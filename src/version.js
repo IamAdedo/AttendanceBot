@@ -15,9 +15,9 @@ function readPackageVersion() {
         const pkgPath = path.join(__dirname, '..', 'package.json');
         const content = fs.readFileSync(pkgPath, 'utf8');
         const pkg = JSON.parse(content);
-        return pkg.version || '3.7.0';
+        return pkg.version || '3.8.0';
     } catch (e) {
-        return '3.7.0';
+        return '3.8.0';
     }
 }
 

@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.8.0] - 2026-09-25
+
+### Added
+- **📜 CLI Terminal 'Command History' Drop-up Menu:**
+  - Added a dedicated interactive arrow icon button (`#cliHistoryDropupBtn`, `fa-chevron-up`) directly on the CLI Terminal's command input field (`#cliTerminalInput`).
+  - Clicking the arrow opens an accessible, floating drop-up panel listing previously executed commands in reverse chronological order.
+  - Each item supports 1-click **Select** (to populate and edit the command line) and 1-click **Re-run** (with instant execution feedback).
+  - Built-in persistent history backed by `localStorage` (`attendancebot_cli_history`), capped at 50 commands with automatic duplicate pruning.
+  - Supports individual command deletion (`x`), bulk "Clear History", `Escape` dismissal, and click-outside dismissal.
+  - Fully integrated with keyboard shortcuts (`Up` / `Down` arrows continue to navigate history seamlessly).
+  - Modern high-contrast styling with dark theme and light terminal appearance compatibility.
+
+### Changed
+- **📄 Streamlined README & Changelog Linking:**
+  - Extracted full historical version entries from `README.md` and added a direct link to `CHANGELOG.md` for clean, focused project documentation.
+
+---
+
 ## [3.7.0] - 2026-09-24
 
 ### Added
